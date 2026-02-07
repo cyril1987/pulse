@@ -102,6 +102,9 @@ const Dashboard = {
             <div class="card-sparkline">
               <canvas data-monitor-id="${m.id}"></canvas>
             </div>
+            <div class="card-actions" style="margin-top:0.5rem;text-align:right">
+              <button class="btn btn-primary btn-sm" data-check-id="${m.id}" onclick="event.preventDefault();event.stopPropagation();Dashboard.checkNow(${m.id},this)">Check Now</button>
+            </div>
           </a>
         `;
       }
@@ -113,6 +116,35 @@ const Dashboard = {
     // Load sparklines
     for (const m of monitors) {
       Dashboard.loadSparkline(m.id);
+    }
+  },
+
+  async checkNow(monitorId, btn) {
+    if (btn) {
+      btn.disabled = true;
+      btn.textContent = 'Checking...';
+    }
+    try {
+      const result = await API.post(`/monitors/${monitorId}/check`);
+      const check = result.check;
+      if (btn) {
+        btn.textContent = check.isSuccess ? 'OK' : 'FAIL';
+        btn.className = check.isSuccess
+          ? 'btn btn-sm' + ' btn-primary'
+          : 'btn btn-sm' + ' btn-danger';
+      }
+      // Refresh dashboard after a short delay to show updated status
+      setTimeout(() => {
+        const app = document.getElementById('app');
+        if (location.hash === '#/' || location.hash === '' || location.hash === '#') {
+          Dashboard.render(app);
+        }
+      }, 1000);
+    } catch (err) {
+      if (btn) {
+        btn.textContent = 'Error';
+        btn.disabled = false;
+      }
     }
   },
 

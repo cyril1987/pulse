@@ -2,6 +2,8 @@ const express = require('express');
 const router = express.Router();
 const db = require('../db');
 const { validateMonitor } = require('../middleware/validate');
+const { checkMonitor } = require('../services/checker');
+const { evaluateAndNotify } = require('../services/notifier');
 
 // List all monitors with 24h stats
 router.get('/', (req, res) => {
@@ -140,6 +142,32 @@ router.post('/:id/resume', (req, res) => {
 
   const monitor = db.prepare('SELECT * FROM monitors WHERE id = ?').get(req.params.id);
   res.json(formatMonitor(monitor));
+});
+
+// Instant check — run a check immediately without waiting for the scheduler
+router.post('/:id/check', async (req, res) => {
+  const monitor = db.prepare('SELECT * FROM monitors WHERE id = ?').get(req.params.id);
+  if (!monitor) {
+    return res.status(404).json({ error: 'Monitor not found' });
+  }
+
+  try {
+    const result = await checkMonitor(monitor);
+    await evaluateAndNotify(monitor, result);
+
+    const updated = db.prepare('SELECT * FROM monitors WHERE id = ?').get(req.params.id);
+    res.json({
+      monitor: formatMonitor(updated),
+      check: {
+        statusCode: result.statusCode,
+        responseTimeMs: result.responseTimeMs,
+        isSuccess: result.isSuccess,
+        errorMessage: result.errorMessage,
+      },
+    });
+  } catch (err) {
+    res.status(500).json({ error: 'Check failed: ' + err.message });
+  }
 });
 
 function formatMonitor(row) {
