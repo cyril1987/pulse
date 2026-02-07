@@ -113,11 +113,11 @@ const MonitorDetail = {
         }
       </div>
 
-      <div style="margin-top:1rem;font-size:0.8rem;color:var(--color-text-secondary)">
-        Notify: ${escapeHtml(monitor.notifyEmail)} &bull;
-        Expected status: ${monitor.expectedStatus} &bull;
-        Timeout: ${monitor.timeoutMs}ms &bull;
-        Created: ${new Date(monitor.createdAt + 'Z').toLocaleString()}
+      <div class="detail-meta">
+        <span>Notify: ${escapeHtml(monitor.notifyEmail)}</span>
+        <span>Expected: ${monitor.expectedStatus}</span>
+        <span>Timeout: ${monitor.timeoutMs}ms</span>
+        <span>Created: ${new Date(monitor.createdAt + 'Z').toLocaleString()}</span>
       </div>
     `;
 

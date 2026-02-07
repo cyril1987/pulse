@@ -102,7 +102,7 @@ const Dashboard = {
             <div class="card-sparkline">
               <canvas data-monitor-id="${m.id}"></canvas>
             </div>
-            <div class="card-actions" style="margin-top:0.5rem;text-align:right">
+            <div class="card-actions">
               <button class="btn btn-primary btn-sm" data-check-id="${m.id}" onclick="event.preventDefault();event.stopPropagation();Dashboard.checkNow(${m.id},this)">Check Now</button>
             </div>
           </a>
