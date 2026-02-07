@@ -92,15 +92,11 @@ body {
   letter-spacing: -0.02em;
 }
 
-.nav-logo {
-  display: flex;
-  align-items: center;
-  justify-content: center;
+.nav-logo-img {
   width: 32px;
   height: 32px;
-  border-radius: var(--radius-sm);
-  background: linear-gradient(135deg, #1a7a6e, var(--color-primary));
-  color: #fff;
+  border-radius: 50%;
+  object-fit: cover;
 }
 
 .nav-links {
