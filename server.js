@@ -22,8 +22,8 @@ app.use((err, req, res, next) => {
   res.status(500).json({ error: 'Internal server error' });
 });
 
-const server = app.listen(config.port, () => {
-  console.log(`URL Monitor running on http://localhost:${config.port}`);
+const server = app.listen(config.port, '0.0.0.0', () => {
+  console.log(`URL Monitor running on http://0.0.0.0:${config.port}`);
   scheduler.start();
 });
 

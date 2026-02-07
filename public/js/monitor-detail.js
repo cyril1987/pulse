@@ -32,6 +32,7 @@ const MonitorDetail = {
           <div class="detail-url">${escapeHtml(monitor.url)}</div>
         </div>
         <div class="detail-actions">
+          <button class="btn btn-primary btn-sm" id="check-now-btn" onclick="MonitorDetail.checkNow(${monitor.id})">Check Now</button>
           <a href="#/edit/${monitor.id}" class="btn btn-secondary btn-sm">Edit</a>
           ${
             monitor.isActive
@@ -138,6 +139,29 @@ const MonitorDetail = {
     if (seconds < 60) return seconds + 's';
     if (seconds < 3600) return Math.round(seconds / 60) + 'm';
     return Math.round(seconds / 3600) + 'h';
+  },
+
+  async checkNow(id) {
+    const btn = document.getElementById('check-now-btn');
+    if (btn) {
+      btn.disabled = true;
+      btn.textContent = 'Checking...';
+    }
+    try {
+      const result = await API.post(`/monitors/${id}/check`);
+      const check = result.check;
+      const msg = check.isSuccess
+        ? `OK — ${check.statusCode} in ${check.responseTimeMs}ms`
+        : `FAILED — ${check.errorMessage || 'Status ' + check.statusCode}`;
+      alert(msg);
+      MonitorDetail.render(document.getElementById('app'), id);
+    } catch (err) {
+      alert('Check failed: ' + err.message);
+      if (btn) {
+        btn.disabled = false;
+        btn.textContent = 'Check Now';
+      }
+    }
   },
 
   async pause(id) {
