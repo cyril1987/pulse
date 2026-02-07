@@ -87,7 +87,7 @@ async function sendDownAlert(monitor, checkResult) {
     `Status Code: ${checkResult.statusCode || 'N/A'}`,
     `Checked At: ${new Date().toISOString()}`,
     '',
-    '-- URL Monitor',
+    '-- iConcile Pulse',
   ].join('\n');
 
   try {
@@ -131,7 +131,7 @@ async function sendRecoveryAlert(monitor) {
     `Downtime Duration: ${downtimeDuration}`,
     `Recovered At: ${new Date().toISOString()}`,
     '',
-    '-- URL Monitor',
+    '-- iConcile Pulse',
   ].join('\n');
 
   try {

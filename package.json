@@ -1,7 +1,7 @@
 {
-  "name": "url-monitor",
+  "name": "iconcile-pulse",
   "version": "1.0.0",
-  "description": "URL monitoring application with email notifications",
+  "description": "iConcile Pulse - Application monitoring across customers",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",

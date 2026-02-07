@@ -23,7 +23,7 @@ app.use((err, req, res, next) => {
 });
 
 const server = app.listen(config.port, '0.0.0.0', () => {
-  console.log(`URL Monitor running on http://0.0.0.0:${config.port}`);
+  console.log(`iConcile Pulse running on http://0.0.0.0:${config.port}`);
   scheduler.start();
 });
 

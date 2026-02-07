@@ -10,7 +10,7 @@ const Chart = {
     const w = rect.width;
     const h = rect.height;
     const padding = { top: 10, right: 10, bottom: 25, left: 50 };
-    const color = options.color || '#818cf8';
+    const color = options.color || '#40b8aa';
 
     const values = data.values;
     const labels = data.labels || [];
@@ -66,8 +66,8 @@ const Chart = {
 
     // Gradient fill under line
     const gradient = ctx.createLinearGradient(0, padding.top, 0, padding.top + plotH);
-    gradient.addColorStop(0, 'rgba(99, 102, 241, 0.15)');
-    gradient.addColorStop(1, 'rgba(99, 102, 241, 0)');
+    gradient.addColorStop(0, 'rgba(42, 157, 143, 0.18)');
+    gradient.addColorStop(1, 'rgba(42, 157, 143, 0)');
 
     // Draw filled area
     ctx.beginPath();
@@ -121,7 +121,7 @@ const Chart = {
       // Glow
       ctx.beginPath();
       ctx.arc(x, y, 6, 0, Math.PI * 2);
-      ctx.fillStyle = 'rgba(99, 102, 241, 0.2)';
+      ctx.fillStyle = 'rgba(42, 157, 143, 0.25)';
       ctx.fill();
       // Dot
       ctx.beginPath();
@@ -141,7 +141,7 @@ const Chart = {
 
     const w = rect.width;
     const h = rect.height;
-    const color = options.color || '#818cf8';
+    const color = options.color || '#40b8aa';
     const failColor = options.failColor || '#f43f5e';
 
     if (!values || values.length === 0) return;
@@ -176,8 +176,8 @@ const Chart = {
 
     // Gradient fill
     const gradient = ctx.createLinearGradient(0, 0, 0, h);
-    gradient.addColorStop(0, 'rgba(99, 102, 241, 0.12)');
-    gradient.addColorStop(1, 'rgba(99, 102, 241, 0)');
+    gradient.addColorStop(0, 'rgba(42, 157, 143, 0.15)');
+    gradient.addColorStop(1, 'rgba(42, 157, 143, 0)');
 
     ctx.beginPath();
     let firstX = null;
