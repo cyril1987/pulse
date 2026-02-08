@@ -1094,18 +1094,14 @@ select.staging-cell-input {
 }
 
 .group-sparkline-row {
-  display: flex;
-  gap: 3px;
-  align-items: flex-end;
-  height: 24px;
-  padding: 0 1rem 0.5rem;
+  padding: 0 1rem 0.75rem;
   margin-top: -0.25rem;
 }
 
 .group-sparkline-row canvas {
-  height: 24px;
-  flex: 1;
-  min-width: 0;
+  width: 100%;
+  height: 32px;
+  display: block;
 }
 
 .group-header:hover {

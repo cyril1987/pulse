@@ -1,6 +1,7 @@
 const Dashboard = {
   refreshTimer: null,
   collapsedGroups: new Set(),
+  defaultsApplied: false,
 
   async render(container) {
     if (Dashboard.refreshTimer) {
@@ -81,6 +82,15 @@ const Dashboard = {
 
       const hasMultipleGroups = groupNames.length > 1 || (groupNames.length === 1 && groupNames[0] !== 'null');
 
+      // Default: collapse all groups on first load
+      if (hasMultipleGroups && !Dashboard.defaultsApplied) {
+        Dashboard.defaultsApplied = true;
+        for (const gName of groupNames) {
+          const gId = gName === 'null' ? '__ungrouped__' : gName;
+          Dashboard.collapsedGroups.add(gId);
+        }
+      }
+
       // Expand / Collapse all toggle
       if (hasMultipleGroups) {
         const allCollapsed = groupNames.every(gName => {
@@ -134,13 +144,14 @@ const Dashboard = {
               </div>
           `;
 
-          // Show sparklines row when collapsed
+          // Show combined sparkline when collapsed
           if (isCollapsed) {
-            html += '<div class="group-sparkline-row">';
-            for (const m of groupMonitors) {
-              html += `<canvas data-group-sparkline="${m.id}" title="${escapeHtml(m.name)}"></canvas>`;
-            }
-            html += '</div>';
+            const monitorIds = groupMonitors.map(m => m.id).join(',');
+            html += `
+              <div class="group-sparkline-row">
+                <canvas data-group-combined-sparkline="${escapeHtml(groupId)}" data-monitor-ids="${monitorIds}"></canvas>
+              </div>
+            `;
           }
         }
 
@@ -192,10 +203,10 @@ const Dashboard = {
       Dashboard.loadSparkline(m.id);
     }
 
-    // Load sparklines for collapsed group rows
-    container.querySelectorAll('canvas[data-group-sparkline]').forEach(canvas => {
-      const monitorId = canvas.dataset.groupSparkline;
-      Dashboard.loadGroupSparkline(monitorId, canvas);
+    // Load combined sparklines for collapsed groups
+    container.querySelectorAll('canvas[data-group-combined-sparkline]').forEach(canvas => {
+      const monitorIds = canvas.dataset.monitorIds.split(',').map(Number);
+      Dashboard.loadCombinedGroupSparkline(monitorIds, canvas);
     });
   },
 
@@ -301,13 +312,43 @@ const Dashboard = {
     }
   },
 
-  async loadGroupSparkline(monitorId, canvas) {
+  async loadCombinedGroupSparkline(monitorIds, canvas) {
     try {
-      const checks = await API.get(
-        `/monitors/${monitorId}/checks/latest?limit=20`
+      // Fetch checks for all monitors in parallel
+      const allChecks = await Promise.all(
+        monitorIds.map(id => API.get(`/monitors/${id}/checks/latest?limit=20`).catch(() => []))
       );
-      if (canvas && checks.length > 0) {
-        Chart.sparkline(canvas, checks);
+
+      // Merge by time slot index: worst status wins, use max response time
+      const maxLen = Math.max(...allChecks.map(c => c.length), 0);
+      if (maxLen === 0) return;
+
+      const combined = [];
+      for (let i = 0; i < maxLen; i++) {
+        let worstSuccess = true;
+        let maxResponseMs = 0;
+        let hasData = false;
+
+        for (const checks of allChecks) {
+          if (i < checks.length) {
+            hasData = true;
+            if (!checks[i].isSuccess) worstSuccess = false;
+            if (checks[i].responseTimeMs > maxResponseMs) {
+              maxResponseMs = checks[i].responseTimeMs;
+            }
+          }
+        }
+
+        if (hasData) {
+          combined.push({
+            isSuccess: worstSuccess,
+            responseTimeMs: maxResponseMs,
+          });
+        }
+      }
+
+      if (canvas && combined.length > 0) {
+        Chart.sparkline(canvas, combined);
       }
     } catch (e) {
       // Sparkline loading is best-effort
