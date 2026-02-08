@@ -6,6 +6,9 @@ const config = require('../config');
 let running = false;
 let intervalHandle = null;
 let lastCleanup = 0;
+let lastTickAt = null;
+let lastTickDurationMs = null;
+let lastTickError = null;
 
 const getDueMonitors = db.prepare(`
   SELECT * FROM monitors
@@ -41,6 +44,7 @@ function start() {
 
 async function tick() {
   if (!running) return;
+  const tickStart = Date.now();
 
   try {
     // Auto-resume monitors whose scheduled downtime has expired
@@ -78,7 +82,13 @@ async function tick() {
     }
 
     maybeCleanup();
+    lastTickAt = new Date().toISOString();
+    lastTickDurationMs = Date.now() - tickStart;
+    lastTickError = null;
   } catch (err) {
+    lastTickAt = new Date().toISOString();
+    lastTickDurationMs = Date.now() - tickStart;
+    lastTickError = err.message;
     console.error('[SCHEDULER] Tick error:', err);
   }
 }
@@ -101,4 +111,14 @@ function stop() {
   console.log('[SCHEDULER] Stopped');
 }
 
-module.exports = { start, stop };
+function getStatus() {
+  return {
+    running,
+    intervalMs: config.schedulerIntervalMs,
+    lastTickAt,
+    lastTickDurationMs,
+    lastTickError,
+  };
+}
+
+module.exports = { start, stop, getStatus };

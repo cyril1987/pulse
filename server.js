@@ -8,6 +8,7 @@ const db = require('./src/db');
 const passport = require('./src/auth');
 const scheduler = require('./src/services/scheduler');
 const authRouter = require('./src/routes/auth');
+const healthRouter = require('./src/routes/health');
 const requireAuth = require('./src/middleware/requireAuth');
 const monitorsRouter = require('./src/routes/monitors');
 const checksRouter = require('./src/routes/checks');
@@ -41,6 +42,9 @@ app.use(passport.session());
 
 // Auth routes (public — before requireAuth)
 app.use(authRouter);
+
+// Public health check (no auth required — for load balancers)
+app.use(healthRouter);
 
 // Protect all API routes
 app.use('/api', requireAuth);

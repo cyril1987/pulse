@@ -51,14 +51,20 @@ function route() {
   const hash = location.hash.slice(1) || '/';
   const app = document.getElementById('app');
 
-  // Stop dashboard refresh when navigating away
+  // Stop auto-refresh timers when navigating away
   if (Dashboard.refreshTimer) {
     clearInterval(Dashboard.refreshTimer);
     Dashboard.refreshTimer = null;
   }
+  if (Health.refreshTimer) {
+    clearInterval(Health.refreshTimer);
+    Health.refreshTimer = null;
+  }
 
   if (hash === '/') {
     Dashboard.render(app);
+  } else if (hash === '/health') {
+    Health.render(app);
   } else if (hash === '/settings') {
     Settings.render(app);
   } else if (hash === '/add') {
