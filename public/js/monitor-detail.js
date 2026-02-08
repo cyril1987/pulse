@@ -141,10 +141,20 @@ const MonitorDetail = {
         }
       </div>
 
+      ${monitor.customHeaders && monitor.customHeaders.length > 0 ? `
+        <div class="chart-container" style="margin-top:1rem">
+          <h3 style="margin-bottom:0.5rem">Custom Headers</h3>
+          <div style="font-size:0.82rem;color:var(--color-text-secondary)">
+            ${monitor.customHeaders.map(h => `<div style="margin-bottom:0.25rem"><strong>${escapeHtml(h.key)}</strong>: <code>${escapeHtml(h.value)}</code></div>`).join('')}
+          </div>
+        </div>
+      ` : ''}
+
       <div class="detail-meta">
         <span>Notify: ${escapeHtml(monitor.notifyEmail)}</span>
         <span>Expected: ${monitor.expectedStatus}</span>
         <span>Timeout: ${monitor.timeoutMs}ms</span>
+        ${monitor.customHeaders && monitor.customHeaders.length > 0 ? `<span>Headers: ${monitor.customHeaders.length} custom</span>` : ''}
         <span>Created: ${new Date(monitor.createdAt + 'Z').toLocaleString()}</span>
       </div>
     `;

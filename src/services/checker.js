@@ -17,11 +17,24 @@ async function checkMonitor(monitor) {
   let errorMessage = null;
 
   try {
+    // Build headers: start with default User-Agent, then merge custom headers
+    const headers = { 'User-Agent': 'URLMonitor/1.0' };
+    if (monitor.custom_headers) {
+      try {
+        const custom = JSON.parse(monitor.custom_headers);
+        for (const h of custom) {
+          if (h.key && h.value) headers[h.key] = h.value;
+        }
+      } catch {
+        // Invalid JSON — skip custom headers
+      }
+    }
+
     const response = await fetch(monitor.url, {
       method: 'GET',
       signal: AbortSignal.timeout(monitor.timeout_ms),
       redirect: 'follow',
-      headers: { 'User-Agent': 'URLMonitor/1.0' },
+      headers,
     });
 
     statusCode = response.status;

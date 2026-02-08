@@ -1,0 +1,1 @@
+ALTER TABLE monitors ADD COLUMN group_name TEXT DEFAULT NULL;

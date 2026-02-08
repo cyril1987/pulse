@@ -1,0 +1,1 @@
+ALTER TABLE monitors ADD COLUMN custom_headers TEXT DEFAULT NULL;

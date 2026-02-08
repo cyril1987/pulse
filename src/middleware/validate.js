@@ -1,8 +1,10 @@
 const ALLOWED_FREQUENCIES = [60, 300, 900, 1800, 3600];
+const FORBIDDEN_HEADERS = ['host', 'content-length', 'transfer-encoding', 'cookie', 'connection'];
 
-function validateMonitor(req, res, next) {
+// Pure validation function — returns array of error strings
+function validateMonitorData(data) {
   const errors = [];
-  const { url, name, frequency, expectedStatus, timeoutMs, notifyEmail } = req.body;
+  const { url, name, frequency, expectedStatus, timeoutMs, notifyEmail, customHeaders } = data;
 
   // URL validation
   if (!url || typeof url !== 'string') {
@@ -64,11 +66,52 @@ function validateMonitor(req, res, next) {
     errors.push('notifyEmail must be a valid email address');
   }
 
+  // Group name validation
+  if (data.group !== undefined && data.group !== null && data.group !== '') {
+    if (typeof data.group !== 'string') {
+      errors.push('group must be a string');
+    } else if (data.group.length > 100) {
+      errors.push('group must be 100 characters or fewer');
+    }
+  }
+
+  // Custom headers validation
+  if (customHeaders !== undefined && customHeaders !== null) {
+    if (!Array.isArray(customHeaders)) {
+      errors.push('customHeaders must be an array');
+    } else if (customHeaders.length > 10) {
+      errors.push('customHeaders cannot have more than 10 entries');
+    } else {
+      for (let i = 0; i < customHeaders.length; i++) {
+        const h = customHeaders[i];
+        if (!h || typeof h !== 'object') {
+          errors.push(`customHeaders[${i}] must be an object with key and value`);
+          continue;
+        }
+        if (!h.key || typeof h.key !== 'string' || !/^[\w-]+$/.test(h.key)) {
+          errors.push(`customHeaders[${i}].key must contain only letters, numbers, hyphens, and underscores`);
+        } else if (FORBIDDEN_HEADERS.includes(h.key.toLowerCase())) {
+          errors.push(`customHeaders[${i}].key "${h.key}" is not allowed`);
+        }
+        if (typeof h.value !== 'string') {
+          errors.push(`customHeaders[${i}].value must be a string`);
+        } else if (h.value.length > 2000) {
+          errors.push(`customHeaders[${i}].value exceeds maximum length of 2000 characters`);
+        }
+      }
+    }
+  }
+
+  return errors;
+}
+
+// Express middleware wrapper
+function validateMonitor(req, res, next) {
+  const errors = validateMonitorData(req.body);
   if (errors.length > 0) {
     return res.status(400).json({ errors });
   }
-
   next();
 }
 
-module.exports = { validateMonitor, ALLOWED_FREQUENCIES };
+module.exports = { validateMonitor, validateMonitorData, ALLOWED_FREQUENCIES };

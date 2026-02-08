@@ -23,10 +23,18 @@ router.get('/', (req, res) => {
          AND c.checked_at > datetime('now', '-1 day')
       ) AS avg_response_ms_24h
     FROM monitors m
-    ORDER BY m.created_at DESC
+    ORDER BY m.group_name NULLS LAST, m.created_at DESC
   `).all();
 
   res.json(monitors.map(formatMonitor));
+});
+
+// List distinct group names (must come before /:id)
+router.get('/groups', (req, res) => {
+  const rows = db.prepare(
+    'SELECT DISTINCT group_name FROM monitors WHERE group_name IS NOT NULL ORDER BY group_name'
+  ).all();
+  res.json(rows.map(r => r.group_name));
 });
 
 // Get single monitor
@@ -59,18 +67,38 @@ router.get('/:id', (req, res) => {
 
 // Create a new monitor
 router.post('/', validateMonitor, (req, res) => {
-  const { url, name, frequency, expectedStatus, timeoutMs, notifyEmail } = req.body;
+  const { url, name, frequency, expectedStatus, timeoutMs, notifyEmail, customHeaders, group } = req.body;
+
+  // Duplicate URL check
+  const existingUrl = db.prepare('SELECT id FROM monitors WHERE url = ?').get(url);
+  if (existingUrl) {
+    return res.status(400).json({ errors: ['A monitor with this URL already exists'] });
+  }
+
+  // Duplicate name check (only if name is provided)
+  const monitorName = name || new URL(url).hostname;
+  const existingName = db.prepare('SELECT id FROM monitors WHERE name = ?').get(monitorName);
+  if (existingName) {
+    return res.status(400).json({ errors: ['A monitor with this name already exists'] });
+  }
+
+  const headersJson = Array.isArray(customHeaders) && customHeaders.length > 0
+    ? JSON.stringify(customHeaders)
+    : null;
+  const groupName = group && typeof group === 'string' && group.trim() ? group.trim() : null;
 
   const result = db.prepare(`
-    INSERT INTO monitors (url, name, frequency_seconds, expected_status, timeout_ms, notify_email)
-    VALUES (?, ?, ?, ?, ?, ?)
+    INSERT INTO monitors (url, name, frequency_seconds, expected_status, timeout_ms, notify_email, custom_headers, group_name)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     url,
-    name || new URL(url).hostname,
+    monitorName,
     frequency || 300,
     expectedStatus || 200,
     timeoutMs || 10000,
-    notifyEmail
+    notifyEmail,
+    headersJson,
+    groupName
   );
 
   const monitor = db.prepare('SELECT * FROM monitors WHERE id = ?').get(result.lastInsertRowid);
@@ -84,20 +112,41 @@ router.put('/:id', validateMonitor, (req, res) => {
     return res.status(404).json({ error: 'Monitor not found' });
   }
 
-  const { url, name, frequency, expectedStatus, timeoutMs, notifyEmail } = req.body;
+  const { url, name, frequency, expectedStatus, timeoutMs, notifyEmail, customHeaders, group } = req.body;
+
+  // Duplicate URL check (exclude current monitor)
+  const existingUrl = db.prepare('SELECT id FROM monitors WHERE url = ? AND id != ?').get(url, req.params.id);
+  if (existingUrl) {
+    return res.status(400).json({ errors: ['A monitor with this URL already exists'] });
+  }
+
+  // Duplicate name check (exclude current monitor)
+  const monitorName = name || new URL(url).hostname;
+  const existingName = db.prepare('SELECT id FROM monitors WHERE name = ? AND id != ?').get(monitorName, req.params.id);
+  if (existingName) {
+    return res.status(400).json({ errors: ['A monitor with this name already exists'] });
+  }
+
+  const headersJson = Array.isArray(customHeaders) && customHeaders.length > 0
+    ? JSON.stringify(customHeaders)
+    : null;
+  const groupName = group && typeof group === 'string' && group.trim() ? group.trim() : null;
 
   db.prepare(`
     UPDATE monitors
     SET url = ?, name = ?, frequency_seconds = ?, expected_status = ?,
-        timeout_ms = ?, notify_email = ?, updated_at = datetime('now')
+        timeout_ms = ?, notify_email = ?, custom_headers = ?, group_name = ?,
+        updated_at = datetime('now')
     WHERE id = ?
   `).run(
     url,
-    name || new URL(url).hostname,
+    monitorName,
     frequency || 300,
     expectedStatus || 200,
     timeoutMs || 10000,
     notifyEmail,
+    headersJson,
+    groupName,
     req.params.id
   );
 
@@ -201,6 +250,19 @@ router.post('/:id/check', async (req, res) => {
 });
 
 function formatMonitor(row) {
+  let customHeaders = null;
+  if (row.custom_headers) {
+    try {
+      const parsed = JSON.parse(row.custom_headers);
+      customHeaders = parsed.map(h => ({
+        key: h.key,
+        value: maskValue(h.value),
+      }));
+    } catch {
+      customHeaders = null;
+    }
+  }
+
   return {
     id: row.id,
     url: row.url,
@@ -218,7 +280,14 @@ function formatMonitor(row) {
     updatedAt: row.updated_at,
     uptimePercent24h: row.uptime_percent_24h ?? null,
     avgResponseMs24h: row.avg_response_ms_24h ?? null,
+    customHeaders,
+    group: row.group_name || null,
   };
+}
+
+function maskValue(value) {
+  if (!value || value.length <= 4) return '****';
+  return value.slice(0, 4) + '****';
 }
 
 module.exports = router;

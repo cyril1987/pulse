@@ -1,5 +1,6 @@
 const Dashboard = {
   refreshTimer: null,
+  collapsedGroups: new Set(),
 
   async render(container) {
     if (Dashboard.refreshTimer) {
@@ -63,68 +64,146 @@ const Dashboard = {
         </div>
       `;
     } else {
-      html += '<div class="monitors-grid">';
+      // Group monitors
+      const groups = {};
       for (const m of monitors) {
-        const statusClass = m.isActive ? m.currentStatus : 'paused';
-        const statusLabel = m.isActive ? m.currentStatus : 'paused';
-        const uptime =
-          m.uptimePercent24h !== null ? m.uptimePercent24h + '%' : '--';
-        const avgMs =
-          m.avgResponseMs24h !== null ? m.avgResponseMs24h + 'ms' : '--';
-        const lastChecked = m.lastCheckedAt
-          ? new Date(m.lastCheckedAt + 'Z').toLocaleString()
-          : 'Never';
+        const groupName = m.group || null;
+        if (!groups[groupName]) groups[groupName] = [];
+        groups[groupName].push(m);
+      }
 
-        let downtimeInfo = '';
-        if (!m.isActive && m.pausedUntil) {
-          downtimeInfo = `<div class="card-downtime-info" data-until="${m.pausedUntil}">&#9208; Resumes at ${new Date(m.pausedUntil + 'Z').toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'})}</div>`;
-        } else if (!m.isActive) {
-          downtimeInfo = '<div class="card-downtime-info">&#9208; Paused indefinitely</div>';
+      // Sort: named groups alphabetically first, ungrouped last
+      const groupNames = Object.keys(groups).sort((a, b) => {
+        if (a === 'null') return 1;
+        if (b === 'null') return -1;
+        return a.localeCompare(b);
+      });
+
+      const hasMultipleGroups = groupNames.length > 1 || (groupNames.length === 1 && groupNames[0] !== 'null');
+
+      for (const gName of groupNames) {
+        const groupMonitors = groups[gName];
+        const isUngrouped = gName === 'null';
+        const displayName = isUngrouped ? 'Ungrouped' : gName;
+        const groupId = isUngrouped ? '__ungrouped__' : gName;
+        const isCollapsed = Dashboard.collapsedGroups.has(groupId);
+
+        const gUp = groupMonitors.filter(m => m.currentStatus === 'up').length;
+        const gDown = groupMonitors.filter(m => m.currentStatus === 'down').length;
+        const gOther = groupMonitors.length - gUp - gDown;
+
+        // Determine overall group status
+        let groupStatus = 'up';
+        if (gDown > 0) groupStatus = 'down';
+        else if (gUp === 0) groupStatus = 'unknown';
+
+        if (hasMultipleGroups) {
+          html += `
+            <div class="group-section">
+              <div class="group-header" data-group-id="${escapeHtml(groupId)}" role="button">
+                <div class="group-header-left">
+                  <span class="group-toggle ${isCollapsed ? 'collapsed' : ''}">&rsaquo;</span>
+                  <span class="status-dot ${groupStatus}" style="display:inline-block"></span>
+                  <span class="group-name">${escapeHtml(displayName)}</span>
+                </div>
+                <div class="group-header-stats">
+                  <span class="group-stat">${groupMonitors.length} monitor${groupMonitors.length !== 1 ? 's' : ''}</span>
+                  ${gUp > 0 ? `<span class="group-stat group-stat-up">${gUp} up</span>` : ''}
+                  ${gDown > 0 ? `<span class="group-stat group-stat-down">${gDown} down</span>` : ''}
+                  ${gOther > 0 ? `<span class="group-stat group-stat-other">${gOther} other</span>` : ''}
+                </div>
+              </div>
+          `;
         }
 
-        html += `
-          <a href="#/${m.id}" class="monitor-card status-${statusClass}">
-            <div class="card-header">
-              <span class="card-name">${escapeHtml(m.name)}</span>
-              <span class="status-badge ${statusClass}">
-                <span class="status-dot ${statusClass}"></span>
-                ${statusLabel}
-              </span>
-            </div>
-            <div class="card-url">${escapeHtml(m.url)}</div>
-            ${downtimeInfo}
-            <div class="card-stats">
-              <div class="card-stat-item">
-                <span class="stat-label">Uptime (24h): </span>
-                <span class="stat-value">${uptime}</span>
-              </div>
-              <div class="card-stat-item">
-                <span class="stat-label">Avg: </span>
-                <span class="stat-value">${avgMs}</span>
-              </div>
-              <div class="card-stat-item">
-                <span class="stat-label">Checked: </span>
-                <span class="stat-value">${lastChecked}</span>
-              </div>
-            </div>
-            <div class="card-sparkline">
-              <canvas data-monitor-id="${m.id}"></canvas>
-            </div>
-            <div class="card-actions">
-              <button class="btn btn-primary btn-sm" data-check-id="${m.id}" onclick="event.preventDefault();event.stopPropagation();Dashboard.checkNow(${m.id},this)">Check Now</button>
-            </div>
-          </a>
-        `;
+        if (!isCollapsed || !hasMultipleGroups) {
+          html += '<div class="monitors-grid">';
+          html += Dashboard.renderMonitorCards(groupMonitors);
+          html += '</div>';
+        }
+
+        if (hasMultipleGroups) {
+          html += '</div>';
+        }
       }
-      html += '</div>';
     }
 
     container.innerHTML = html;
+
+    // Attach group toggle listeners
+    container.querySelectorAll('.group-header').forEach(header => {
+      header.addEventListener('click', () => {
+        const groupId = header.dataset.groupId;
+        if (Dashboard.collapsedGroups.has(groupId)) {
+          Dashboard.collapsedGroups.delete(groupId);
+        } else {
+          Dashboard.collapsedGroups.add(groupId);
+        }
+        Dashboard.renderContent(container, monitors);
+      });
+    });
 
     // Load sparklines
     for (const m of monitors) {
       Dashboard.loadSparkline(m.id);
     }
+  },
+
+  renderMonitorCards(monitors) {
+    let html = '';
+    for (const m of monitors) {
+      const statusClass = m.isActive ? m.currentStatus : 'paused';
+      const statusLabel = m.isActive ? m.currentStatus : 'paused';
+      const uptime =
+        m.uptimePercent24h !== null ? m.uptimePercent24h + '%' : '--';
+      const avgMs =
+        m.avgResponseMs24h !== null ? m.avgResponseMs24h + 'ms' : '--';
+      const lastChecked = m.lastCheckedAt
+        ? new Date(m.lastCheckedAt + 'Z').toLocaleString()
+        : 'Never';
+
+      let downtimeInfo = '';
+      if (!m.isActive && m.pausedUntil) {
+        downtimeInfo = `<div class="card-downtime-info" data-until="${m.pausedUntil}">&#9208; Resumes at ${new Date(m.pausedUntil + 'Z').toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'})}</div>`;
+      } else if (!m.isActive) {
+        downtimeInfo = '<div class="card-downtime-info">&#9208; Paused indefinitely</div>';
+      }
+
+      html += `
+        <a href="#/${m.id}" class="monitor-card status-${statusClass}">
+          <div class="card-header">
+            <span class="card-name">${escapeHtml(m.name)}</span>
+            <span class="status-badge ${statusClass}">
+              <span class="status-dot ${statusClass}"></span>
+              ${statusLabel}
+            </span>
+          </div>
+          <div class="card-url">${escapeHtml(m.url)}</div>
+          ${downtimeInfo}
+          <div class="card-stats">
+            <div class="card-stat-item">
+              <span class="stat-label">Uptime (24h): </span>
+              <span class="stat-value">${uptime}</span>
+            </div>
+            <div class="card-stat-item">
+              <span class="stat-label">Avg: </span>
+              <span class="stat-value">${avgMs}</span>
+            </div>
+            <div class="card-stat-item">
+              <span class="stat-label">Checked: </span>
+              <span class="stat-value">${lastChecked}</span>
+            </div>
+          </div>
+          <div class="card-sparkline">
+            <canvas data-monitor-id="${m.id}"></canvas>
+          </div>
+          <div class="card-actions">
+            <button class="btn btn-primary btn-sm" data-check-id="${m.id}" onclick="event.preventDefault();event.stopPropagation();Dashboard.checkNow(${m.id},this)">Check Now</button>
+          </div>
+        </a>
+      `;
+    }
+    return html;
   },
 
   async checkNow(monitorId, btn) {
