@@ -13,6 +13,7 @@ const requireAuth = require('./src/middleware/requireAuth');
 const monitorsRouter = require('./src/routes/monitors');
 const checksRouter = require('./src/routes/checks');
 const settingsRouter = require('./src/routes/settings');
+const bulkRouter = require('./src/routes/bulk');
 
 const app = express();
 
@@ -52,6 +53,7 @@ app.use('/api', requireAuth);
 app.use('/api/monitors', monitorsRouter);
 app.use('/api', checksRouter);
 app.use('/api', settingsRouter);
+app.use('/api', bulkRouter);
 
 app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));

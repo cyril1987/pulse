@@ -67,6 +67,8 @@ function route() {
     Health.render(app);
   } else if (hash === '/settings') {
     Settings.render(app);
+  } else if (hash === '/upload') {
+    BulkUpload.render(app);
   } else if (hash === '/add') {
     MonitorForm.render(app);
   } else if (hash.startsWith('/edit/')) {

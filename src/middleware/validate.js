@@ -1,9 +1,10 @@
 const ALLOWED_FREQUENCIES = [60, 300, 900, 1800, 3600];
 const FORBIDDEN_HEADERS = ['host', 'content-length', 'transfer-encoding', 'cookie', 'connection'];
 
-function validateMonitor(req, res, next) {
+// Pure validation function — returns array of error strings
+function validateMonitorData(data) {
   const errors = [];
-  const { url, name, frequency, expectedStatus, timeoutMs, notifyEmail, customHeaders } = req.body;
+  const { url, name, frequency, expectedStatus, timeoutMs, notifyEmail, customHeaders } = data;
 
   // URL validation
   if (!url || typeof url !== 'string') {
@@ -92,11 +93,16 @@ function validateMonitor(req, res, next) {
     }
   }
 
+  return errors;
+}
+
+// Express middleware wrapper
+function validateMonitor(req, res, next) {
+  const errors = validateMonitorData(req.body);
   if (errors.length > 0) {
     return res.status(400).json({ errors });
   }
-
   next();
 }
 
-module.exports = { validateMonitor, ALLOWED_FREQUENCIES };
+module.exports = { validateMonitor, validateMonitorData, ALLOWED_FREQUENCIES };
