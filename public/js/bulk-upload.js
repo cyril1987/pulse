@@ -3,15 +3,23 @@ const BulkUpload = {
   currentStep: 1,
   importResults: null,
   availableGroups: [],
+  existingUrls: new Set(),
+  existingNames: new Set(),
 
   render(container) {
     this.parsedRows = [];
     this.currentStep = 1;
     this.importResults = null;
     this.availableGroups = [];
-    // Pre-fetch available groups
+    this.existingUrls = new Set();
+    this.existingNames = new Set();
+    // Pre-fetch available groups and existing monitors for duplicate checking
     API.get('/monitors/groups').then(groups => {
       this.availableGroups = groups;
+    }).catch(() => {});
+    API.get('/monitors').then(monitors => {
+      this.existingUrls = new Set(monitors.map(m => m.url));
+      this.existingNames = new Set(monitors.map(m => m.name));
     }).catch(() => {});
     this.renderUploadStep(container);
   },
@@ -244,13 +252,27 @@ const BulkUpload = {
       }
     }
     for (const r of rows) {
+      // Check against existing monitors in DB
+      if (r.data.url && this.existingUrls.has(r.data.url)) {
+        if (!r.errors.some(e => e.includes('URL already exists'))) {
+          r.errors.push('A monitor with this URL already exists');
+          r.isValid = false;
+        }
+      }
+      const name = r.data.name || '';
+      if (name && this.existingNames.has(name)) {
+        if (!r.errors.some(e => e.includes('name already exists'))) {
+          r.errors.push('A monitor with this name already exists');
+          r.isValid = false;
+        }
+      }
+      // Check for duplicates within the batch
       if (r.data.url && urlCount[r.data.url] > 1) {
         if (!r.errors.some(e => e.includes('Duplicate URL'))) {
           r.errors.push('Duplicate URL within this upload batch');
           r.isValid = false;
         }
       }
-      const name = r.data.name || '';
       if (name && nameCount[name] > 1) {
         if (!r.errors.some(e => e.includes('Duplicate name'))) {
           r.errors.push('Duplicate name within this upload batch');
@@ -424,8 +446,8 @@ const BulkUpload = {
         <td style="text-align:center;color:var(--color-text-tertiary)">${r.rowNum}</td>
         <td style="text-align:center"><span class="status-dot ${r.isValid ? 'up' : 'down'}" style="display:inline-block"></span></td>
         <td>${this.renderGroupSelect(i, d.group || '')}</td>
-        <td><input type="text" class="staging-cell-input ${r.errors.some(e => e.includes('url')) ? 'has-error' : ''}" data-row="${i}" data-field="url" value="${escapeAttr(d.url || '')}"></td>
-        <td><input type="text" class="staging-cell-input" data-row="${i}" data-field="name" value="${escapeAttr(d.name || '')}"></td>
+        <td><input type="text" class="staging-cell-input ${r.errors.some(e => e.toLowerCase().includes('url')) ? 'has-error' : ''}" data-row="${i}" data-field="url" value="${escapeAttr(d.url || '')}"></td>
+        <td><input type="text" class="staging-cell-input ${r.errors.some(e => e.toLowerCase().includes('name')) ? 'has-error' : ''}" data-row="${i}" data-field="name" value="${escapeAttr(d.name || '')}"></td>
         <td>
           <select class="staging-cell-input" data-row="${i}" data-field="frequency">
             ${FREQS.map(f => `<option value="${f}" ${freqVal === f ? 'selected' : ''}>${FREQ_LABELS[f]}</option>`).join('')}
