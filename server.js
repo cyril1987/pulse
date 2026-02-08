@@ -1,9 +1,11 @@
+require('dotenv').config();
 const express = require('express');
 const path = require('path');
 const config = require('./src/config');
 const scheduler = require('./src/services/scheduler');
 const monitorsRouter = require('./src/routes/monitors');
 const checksRouter = require('./src/routes/checks');
+const settingsRouter = require('./src/routes/settings');
 
 const app = express();
 
@@ -12,6 +14,7 @@ app.use(express.static(path.join(__dirname, 'public')));
 
 app.use('/api/monitors', monitorsRouter);
 app.use('/api', checksRouter);
+app.use('/api', settingsRouter);
 
 app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
@@ -23,7 +26,7 @@ app.use((err, req, res, next) => {
 });
 
 const server = app.listen(config.port, '0.0.0.0', () => {
-  console.log(`URL Monitor running on http://0.0.0.0:${config.port}`);
+  console.log(`iConcile Pulse running on http://0.0.0.0:${config.port}`);
   scheduler.start();
 });
 

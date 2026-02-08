@@ -10,6 +10,8 @@ function route() {
 
   if (hash === '/') {
     Dashboard.render(app);
+  } else if (hash === '/settings') {
+    Settings.render(app);
   } else if (hash === '/add') {
     MonitorForm.render(app);
   } else if (hash.startsWith('/edit/')) {

@@ -16,6 +16,17 @@ const getDueMonitors = db.prepare(`
   )
 `);
 
+const getExpiredDowntime = db.prepare(`
+  SELECT * FROM monitors
+  WHERE is_active = 0
+  AND paused_until IS NOT NULL
+  AND paused_until <= datetime('now')
+`);
+
+const resumeMonitor = db.prepare(`
+  UPDATE monitors SET is_active = 1, paused_until = NULL, updated_at = datetime('now') WHERE id = ?
+`);
+
 const deleteOldChecks = db.prepare(
   "DELETE FROM checks WHERE checked_at < datetime('now', '-' || ? || ' days')"
 );
@@ -32,6 +43,13 @@ async function tick() {
   if (!running) return;
 
   try {
+    // Auto-resume monitors whose scheduled downtime has expired
+    const expired = getExpiredDowntime.all();
+    for (const m of expired) {
+      resumeMonitor.run(m.id);
+      console.log(`[SCHEDULER] Auto-resumed ${m.name} — scheduled downtime ended`);
+    }
+
     const dueMonitors = getDueMonitors.all();
 
     if (dueMonitors.length > 0) {

@@ -19,4 +19,11 @@ const schema = fs.readFileSync(
 );
 db.exec(schema);
 
+// Run incremental migrations (safe to re-run)
+try {
+  db.exec(fs.readFileSync(path.join(__dirname, '..', 'migrations', '002-add-paused-until.sql'), 'utf8'));
+} catch (e) {
+  // Column already exists — ignore
+}
+
 module.exports = db;

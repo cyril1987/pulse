@@ -116,10 +116,10 @@ router.delete('/:id', (req, res) => {
   res.status(204).end();
 });
 
-// Pause a monitor
+// Pause a monitor (indefinite)
 router.post('/:id/pause', (req, res) => {
   const result = db.prepare(
-    'UPDATE monitors SET is_active = 0, updated_at = datetime(\'now\') WHERE id = ?'
+    'UPDATE monitors SET is_active = 0, paused_until = NULL, updated_at = datetime(\'now\') WHERE id = ?'
   ).run(req.params.id);
 
   if (result.changes === 0) {
@@ -133,11 +133,43 @@ router.post('/:id/pause', (req, res) => {
 // Resume a monitor
 router.post('/:id/resume', (req, res) => {
   const result = db.prepare(
-    'UPDATE monitors SET is_active = 1, updated_at = datetime(\'now\') WHERE id = ?'
+    'UPDATE monitors SET is_active = 1, paused_until = NULL, updated_at = datetime(\'now\') WHERE id = ?'
   ).run(req.params.id);
 
   if (result.changes === 0) {
     return res.status(404).json({ error: 'Monitor not found' });
+  }
+
+  const monitor = db.prepare('SELECT * FROM monitors WHERE id = ?').get(req.params.id);
+  res.json(formatMonitor(monitor));
+});
+
+// Register scheduled downtime with duration
+router.post('/:id/downtime', (req, res) => {
+  const existing = db.prepare('SELECT * FROM monitors WHERE id = ?').get(req.params.id);
+  if (!existing) {
+    return res.status(404).json({ error: 'Monitor not found' });
+  }
+
+  const { duration } = req.body;
+  const validDurations = [900, 1800, 3600, 7200, 14400, 28800, 86400, 0];
+
+  if (duration === undefined || !validDurations.includes(duration)) {
+    return res.status(400).json({
+      error: 'Invalid duration. Valid options: 900 (15m), 1800 (30m), 3600 (1h), 7200 (2h), 14400 (4h), 28800 (8h), 86400 (24h), 0 (indefinite)'
+    });
+  }
+
+  if (duration === 0) {
+    // Indefinite pause
+    db.prepare(
+      'UPDATE monitors SET is_active = 0, paused_until = NULL, updated_at = datetime(\'now\') WHERE id = ?'
+    ).run(req.params.id);
+  } else {
+    // Timed downtime
+    db.prepare(
+      'UPDATE monitors SET is_active = 0, paused_until = datetime(\'now\', \'+\' || ? || \' seconds\'), updated_at = datetime(\'now\') WHERE id = ?'
+    ).run(duration, req.params.id);
   }
 
   const monitor = db.prepare('SELECT * FROM monitors WHERE id = ?').get(req.params.id);
@@ -183,6 +215,7 @@ function formatMonitor(row) {
     currentStatus: row.current_status,
     lastCheckedAt: row.last_checked_at,
     lastStatusChangeAt: row.last_status_change_at,
+    pausedUntil: row.paused_until || null,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     uptimePercent24h: row.uptime_percent_24h ?? null,

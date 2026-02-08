@@ -87,7 +87,7 @@ async function sendDownAlert(monitor, checkResult) {
     `Status Code: ${checkResult.statusCode || 'N/A'}`,
     `Checked At: ${new Date().toISOString()}`,
     '',
-    '-- URL Monitor',
+    '-- iConcile Pulse',
   ].join('\n');
 
   try {
@@ -131,7 +131,7 @@ async function sendRecoveryAlert(monitor) {
     `Downtime Duration: ${downtimeDuration}`,
     `Recovered At: ${new Date().toISOString()}`,
     '',
-    '-- URL Monitor',
+    '-- iConcile Pulse',
   ].join('\n');
 
   try {
@@ -153,4 +153,26 @@ async function sendRecoveryAlert(monitor) {
   }
 }
 
-module.exports = { evaluateAndNotify };
+module.exports = { evaluateAndNotify, sendTestEmail };
+
+async function sendTestEmail(toEmail) {
+  const subject = '[TEST] iConcile Pulse - Email Configuration Test';
+  const text = [
+    'This is a test email from iConcile Pulse.',
+    '',
+    'If you are reading this, your SMTP configuration is working correctly.',
+    '',
+    `SMTP Host: ${config.smtp.host}`,
+    `SMTP Port: ${config.smtp.port}`,
+    `Sent At: ${new Date().toISOString()}`,
+    '',
+    '-- iConcile Pulse',
+  ].join('\n');
+
+  await getTransporter().sendMail({
+    from: config.smtp.from,
+    to: toEmail,
+    subject,
+    text,
+  });
+}

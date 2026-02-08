@@ -36,12 +36,40 @@ const MonitorDetail = {
           <a href="#/edit/${monitor.id}" class="btn btn-secondary btn-sm">Edit</a>
           ${
             monitor.isActive
-              ? `<button class="btn btn-secondary btn-sm" onclick="MonitorDetail.pause(${monitor.id})">Pause</button>`
+              ? `<div class="downtime-dropdown">
+                  <button class="btn btn-secondary btn-sm" onclick="MonitorDetail.toggleDowntimeMenu(event)">Schedule Downtime</button>
+                  <div class="downtime-menu" id="downtime-menu">
+                    <div class="downtime-menu-title">Pause monitoring for:</div>
+                    <button onclick="MonitorDetail.scheduleDowntime(${monitor.id}, 900)">15 minutes</button>
+                    <button onclick="MonitorDetail.scheduleDowntime(${monitor.id}, 1800)">30 minutes</button>
+                    <button onclick="MonitorDetail.scheduleDowntime(${monitor.id}, 3600)">1 hour</button>
+                    <button onclick="MonitorDetail.scheduleDowntime(${monitor.id}, 7200)">2 hours</button>
+                    <button onclick="MonitorDetail.scheduleDowntime(${monitor.id}, 14400)">4 hours</button>
+                    <button onclick="MonitorDetail.scheduleDowntime(${monitor.id}, 28800)">8 hours</button>
+                    <button onclick="MonitorDetail.scheduleDowntime(${monitor.id}, 86400)">24 hours</button>
+                    <div class="downtime-menu-divider"></div>
+                    <button onclick="MonitorDetail.scheduleDowntime(${monitor.id}, 0)">Indefinitely</button>
+                  </div>
+                </div>`
               : `<button class="btn btn-primary btn-sm" onclick="MonitorDetail.resume(${monitor.id})">Resume</button>`
           }
           <button class="btn btn-danger btn-sm" onclick="MonitorDetail.remove(${monitor.id})">Delete</button>
         </div>
       </div>
+
+      ${!monitor.isActive ? `
+        <div class="downtime-banner">
+          <div class="downtime-banner-icon">&#9208;</div>
+          <div class="downtime-banner-text">
+            <strong>Monitoring paused</strong>
+            ${monitor.pausedUntil
+              ? `<span>Auto-resumes at ${new Date(monitor.pausedUntil + 'Z').toLocaleString()} (<span id="downtime-countdown" data-until="${monitor.pausedUntil}"></span>)</span>`
+              : '<span>Paused indefinitely</span>'
+            }
+          </div>
+          <button class="btn btn-primary btn-sm" onclick="MonitorDetail.resume(${monitor.id})">Resume Now</button>
+        </div>
+      ` : ''}
 
       <div class="stats-grid">
         <div class="stat-card">
@@ -113,15 +141,22 @@ const MonitorDetail = {
         }
       </div>
 
-      <div style="margin-top:1rem;font-size:0.8rem;color:var(--color-text-secondary)">
-        Notify: ${escapeHtml(monitor.notifyEmail)} &bull;
-        Expected status: ${monitor.expectedStatus} &bull;
-        Timeout: ${monitor.timeoutMs}ms &bull;
-        Created: ${new Date(monitor.createdAt + 'Z').toLocaleString()}
+      <div class="detail-meta">
+        <span>Notify: ${escapeHtml(monitor.notifyEmail)}</span>
+        <span>Expected: ${monitor.expectedStatus}</span>
+        <span>Timeout: ${monitor.timeoutMs}ms</span>
+        <span>Created: ${new Date(monitor.createdAt + 'Z').toLocaleString()}</span>
       </div>
     `;
 
     container.innerHTML = html;
+
+    // Start countdown timer if paused with a scheduled end
+    if (MonitorDetail._countdownTimer) {
+      clearInterval(MonitorDetail._countdownTimer);
+      MonitorDetail._countdownTimer = null;
+    }
+    MonitorDetail.startCountdown();
 
     // Draw response time chart
     const canvas = document.getElementById('response-chart');
@@ -190,5 +225,52 @@ const MonitorDetail = {
     } catch (err) {
       alert('Failed to delete: ' + err.message);
     }
+  },
+
+  toggleDowntimeMenu(event) {
+    event.stopPropagation();
+    const menu = document.getElementById('downtime-menu');
+    if (menu) {
+      menu.classList.toggle('open');
+    }
+    // Close menu when clicking elsewhere
+    const closeMenu = () => {
+      if (menu) menu.classList.remove('open');
+      document.removeEventListener('click', closeMenu);
+    };
+    setTimeout(() => document.addEventListener('click', closeMenu), 0);
+  },
+
+  async scheduleDowntime(id, duration) {
+    try {
+      await API.post(`/monitors/${id}/downtime`, { duration });
+      MonitorDetail.render(document.getElementById('app'), id);
+    } catch (err) {
+      alert('Failed to schedule downtime: ' + err.message);
+    }
+  },
+
+  startCountdown() {
+    const el = document.getElementById('downtime-countdown');
+    if (!el) return;
+    const update = () => {
+      const until = new Date(el.dataset.until + 'Z').getTime();
+      const now = Date.now();
+      const diff = until - now;
+      if (diff <= 0) {
+        el.textContent = 'resuming...';
+        return;
+      }
+      const h = Math.floor(diff / 3600000);
+      const m = Math.floor((diff % 3600000) / 60000);
+      const s = Math.floor((diff % 60000) / 1000);
+      const parts = [];
+      if (h > 0) parts.push(h + 'h');
+      if (m > 0) parts.push(m + 'm');
+      parts.push(s + 's');
+      el.textContent = parts.join(' ') + ' remaining';
+    };
+    update();
+    MonitorDetail._countdownTimer = setInterval(update, 1000);
   },
 };

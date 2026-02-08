@@ -10,6 +10,7 @@ CREATE TABLE IF NOT EXISTS monitors (
     current_status TEXT NOT NULL DEFAULT 'unknown',
     last_checked_at TEXT,
     last_status_change_at TEXT,
+    paused_until TEXT,
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
     updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
