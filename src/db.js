@@ -32,4 +32,15 @@ try {
   // Tables/columns already exist — ignore
 }
 
+// Drop the incorrectly-created sessions table (if it has wrong schema)
+// so better-sqlite3-session-store can recreate it with the correct columns
+try {
+  const cols = db.prepare("PRAGMA table_info(sessions)").all().map(c => c.name);
+  if (cols.includes('expired') && !cols.includes('expire')) {
+    db.exec('DROP TABLE sessions');
+  }
+} catch (e) {
+  // ignore
+}
+
 module.exports = db;

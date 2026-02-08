@@ -11,14 +11,7 @@ CREATE TABLE IF NOT EXISTS users (
 
 CREATE INDEX IF NOT EXISTS idx_users_google_id ON users(google_id);
 
--- Sessions table for express-session (better-sqlite3-session-store)
-CREATE TABLE IF NOT EXISTS sessions (
-    sid TEXT PRIMARY KEY,
-    sess TEXT NOT NULL,
-    expired INTEGER NOT NULL
-);
-
-CREATE INDEX IF NOT EXISTS idx_sessions_expired ON sessions(expired);
+-- Sessions table is created automatically by better-sqlite3-session-store
 
 -- Add user_id to monitors for multi-tenancy
 -- (nullable so existing monitors are preserved as unowned)
