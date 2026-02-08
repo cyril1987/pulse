@@ -15,6 +15,19 @@ router.get('/auth/google/callback',
   }
 );
 
+// Initiate Microsoft OAuth login
+router.get('/auth/microsoft',
+  passport.authenticate('microsoft', { prompt: 'select_account' })
+);
+
+// Microsoft OAuth callback
+router.get('/auth/microsoft/callback',
+  passport.authenticate('microsoft', { failureRedirect: '/login.html?error=unauthorized' }),
+  (req, res) => {
+    res.redirect('/');
+  }
+);
+
 // Logout
 router.post('/auth/logout', (req, res) => {
   req.logout(() => {

@@ -14,6 +14,12 @@ module.exports = {
     clientSecret: process.env.GOOGLE_CLIENT_SECRET || '',
     callbackUrl: process.env.GOOGLE_CALLBACK_URL || '/auth/google/callback',
   },
+  microsoft: {
+    clientId: process.env.MICROSOFT_CLIENT_ID || '',
+    clientSecret: process.env.MICROSOFT_CLIENT_SECRET || '',
+    callbackUrl: process.env.MICROSOFT_CALLBACK_URL || '/auth/microsoft/callback',
+    tenant: process.env.MICROSOFT_TENANT || 'common',
+  },
   session: {
     secret: process.env.SESSION_SECRET || 'change-me-in-production',
   },

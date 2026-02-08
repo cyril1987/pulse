@@ -32,6 +32,12 @@ try {
   // Tables/columns already exist — ignore
 }
 
+try {
+  db.exec(fs.readFileSync(path.join(__dirname, '..', 'migrations', '004-add-microsoft-sso.sql'), 'utf8'));
+} catch (e) {
+  // Migration already applied — ignore
+}
+
 // Ensure sessions table has the correct schema expected by better-sqlite3-session-store.
 // The library expects columns: (sid, sess, expire). If the table exists with a different
 // schema (e.g. 'expired' instead of 'expire'), drop it so the library can recreate it.
