@@ -28,8 +28,19 @@ const MonitorForm = {
         <form id="monitor-form">
           <div class="form-group">
             <label for="group">Group</label>
-            <input type="text" id="group" name="group" value="${escapeAttr(group)}" placeholder="e.g. Demo Environment, Production APIs" list="group-suggestions">
-            <datalist id="group-suggestions"></datalist>
+            <div class="group-select-wrapper" id="group-select-wrapper">
+              <select id="group" name="group">
+                <option value="">-- No Group --</option>
+              </select>
+              <button type="button" class="btn btn-secondary btn-sm" id="add-group-btn" title="Add new group">+ New</button>
+            </div>
+            <div id="new-group-input" style="display:none;margin-top:0.5rem">
+              <div style="display:flex;gap:0.5rem;align-items:center">
+                <input type="text" id="new-group-name" placeholder="Enter new group name" style="flex:1">
+                <button type="button" class="btn btn-primary btn-sm" id="confirm-new-group">Add</button>
+                <button type="button" class="btn btn-secondary btn-sm" id="cancel-new-group">Cancel</button>
+              </div>
+            </div>
             <div class="hint">Optional group to organize monitors on the dashboard</div>
           </div>
 
@@ -116,14 +127,61 @@ const MonitorForm = {
 
     addBtn.addEventListener('click', () => addHeaderRow('', '', false));
 
-    // Populate group suggestions from existing monitors
-    API.get('/monitors').then(monitors => {
-      const groups = [...new Set(monitors.map(m => m.group).filter(Boolean))];
-      const datalist = document.getElementById('group-suggestions');
-      if (datalist) {
-        datalist.innerHTML = groups.map(g => `<option value="${escapeAttr(g)}">`).join('');
+    // Populate group dropdown from existing groups
+    const groupSelect = document.getElementById('group');
+    API.get('/monitors/groups').then(groups => {
+      for (const g of groups) {
+        const opt = document.createElement('option');
+        opt.value = g;
+        opt.textContent = g;
+        if (g === group) opt.selected = true;
+        groupSelect.appendChild(opt);
+      }
+      // If editing and group exists but wasn't in the list, add it
+      if (group && !groups.includes(group)) {
+        const opt = document.createElement('option');
+        opt.value = group;
+        opt.textContent = group;
+        opt.selected = true;
+        groupSelect.appendChild(opt);
       }
     }).catch(() => {});
+
+    // Add new group inline
+    document.getElementById('add-group-btn').addEventListener('click', () => {
+      document.getElementById('new-group-input').style.display = 'block';
+      document.getElementById('new-group-name').focus();
+    });
+    document.getElementById('cancel-new-group').addEventListener('click', () => {
+      document.getElementById('new-group-input').style.display = 'none';
+      document.getElementById('new-group-name').value = '';
+    });
+    document.getElementById('confirm-new-group').addEventListener('click', () => {
+      const newName = document.getElementById('new-group-name').value.trim();
+      if (!newName) return;
+      if (newName.length > 100) {
+        alert('Group name must be 100 characters or fewer');
+        return;
+      }
+      // Check if already in the dropdown
+      const exists = Array.from(groupSelect.options).some(o => o.value === newName);
+      if (!exists) {
+        const opt = document.createElement('option');
+        opt.value = newName;
+        opt.textContent = newName;
+        groupSelect.appendChild(opt);
+      }
+      groupSelect.value = newName;
+      document.getElementById('new-group-input').style.display = 'none';
+      document.getElementById('new-group-name').value = '';
+    });
+    // Allow Enter key in new group input
+    document.getElementById('new-group-name').addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        document.getElementById('confirm-new-group').click();
+      }
+    });
 
     document.getElementById('monitor-form').addEventListener('submit', async (e) => {
       e.preventDefault();
@@ -141,7 +199,7 @@ const MonitorForm = {
         }
       }
 
-      const groupVal = document.getElementById('group').value.trim();
+      const groupVal = (document.getElementById('group').value || '').trim();
       const formData = {
         url: document.getElementById('url').value.trim(),
         name: document.getElementById('name').value.trim(),

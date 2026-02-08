@@ -29,6 +29,14 @@ router.get('/', (req, res) => {
   res.json(monitors.map(formatMonitor));
 });
 
+// List distinct group names (must come before /:id)
+router.get('/groups', (req, res) => {
+  const rows = db.prepare(
+    'SELECT DISTINCT group_name FROM monitors WHERE group_name IS NOT NULL ORDER BY group_name'
+  ).all();
+  res.json(rows.map(r => r.group_name));
+});
+
 // Get single monitor
 router.get('/:id', (req, res) => {
   const monitor = db.prepare(`
@@ -60,6 +68,20 @@ router.get('/:id', (req, res) => {
 // Create a new monitor
 router.post('/', validateMonitor, (req, res) => {
   const { url, name, frequency, expectedStatus, timeoutMs, notifyEmail, customHeaders, group } = req.body;
+
+  // Duplicate URL check
+  const existingUrl = db.prepare('SELECT id FROM monitors WHERE url = ?').get(url);
+  if (existingUrl) {
+    return res.status(400).json({ errors: ['A monitor with this URL already exists'] });
+  }
+
+  // Duplicate name check (only if name is provided)
+  const monitorName = name || new URL(url).hostname;
+  const existingName = db.prepare('SELECT id FROM monitors WHERE name = ?').get(monitorName);
+  if (existingName) {
+    return res.status(400).json({ errors: ['A monitor with this name already exists'] });
+  }
+
   const headersJson = Array.isArray(customHeaders) && customHeaders.length > 0
     ? JSON.stringify(customHeaders)
     : null;
@@ -70,7 +92,7 @@ router.post('/', validateMonitor, (req, res) => {
     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     url,
-    name || new URL(url).hostname,
+    monitorName,
     frequency || 300,
     expectedStatus || 200,
     timeoutMs || 10000,
@@ -91,6 +113,20 @@ router.put('/:id', validateMonitor, (req, res) => {
   }
 
   const { url, name, frequency, expectedStatus, timeoutMs, notifyEmail, customHeaders, group } = req.body;
+
+  // Duplicate URL check (exclude current monitor)
+  const existingUrl = db.prepare('SELECT id FROM monitors WHERE url = ? AND id != ?').get(url, req.params.id);
+  if (existingUrl) {
+    return res.status(400).json({ errors: ['A monitor with this URL already exists'] });
+  }
+
+  // Duplicate name check (exclude current monitor)
+  const monitorName = name || new URL(url).hostname;
+  const existingName = db.prepare('SELECT id FROM monitors WHERE name = ? AND id != ?').get(monitorName, req.params.id);
+  if (existingName) {
+    return res.status(400).json({ errors: ['A monitor with this name already exists'] });
+  }
+
   const headersJson = Array.isArray(customHeaders) && customHeaders.length > 0
     ? JSON.stringify(customHeaders)
     : null;
@@ -104,7 +140,7 @@ router.put('/:id', validateMonitor, (req, res) => {
     WHERE id = ?
   `).run(
     url,
-    name || new URL(url).hostname,
+    monitorName,
     frequency || 300,
     expectedStatus || 200,
     timeoutMs || 10000,

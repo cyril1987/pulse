@@ -2,11 +2,17 @@ const BulkUpload = {
   parsedRows: [],
   currentStep: 1,
   importResults: null,
+  availableGroups: [],
 
   render(container) {
     this.parsedRows = [];
     this.currentStep = 1;
     this.importResults = null;
+    this.availableGroups = [];
+    // Pre-fetch available groups
+    API.get('/monitors/groups').then(groups => {
+      this.availableGroups = groups;
+    }).catch(() => {});
     this.renderUploadStep(container);
   },
 
@@ -218,7 +224,40 @@ const BulkUpload = {
     const filtered = rows.filter(r => r.data.url || r.data.notifyEmail || r.data.name);
 
     filtered.forEach(r => this.validateRow(r));
+
+    // Check for duplicates within the batch
+    this.checkBatchDuplicates(filtered);
+
     return filtered;
+  },
+
+  checkBatchDuplicates(rows) {
+    const urlCount = {};
+    const nameCount = {};
+    for (const r of rows) {
+      if (r.data.url) {
+        urlCount[r.data.url] = (urlCount[r.data.url] || 0) + 1;
+      }
+      const name = r.data.name || '';
+      if (name) {
+        nameCount[name] = (nameCount[name] || 0) + 1;
+      }
+    }
+    for (const r of rows) {
+      if (r.data.url && urlCount[r.data.url] > 1) {
+        if (!r.errors.some(e => e.includes('Duplicate URL'))) {
+          r.errors.push('Duplicate URL within this upload batch');
+          r.isValid = false;
+        }
+      }
+      const name = r.data.name || '';
+      if (name && nameCount[name] > 1) {
+        if (!r.errors.some(e => e.includes('Duplicate name'))) {
+          r.errors.push('Duplicate name within this upload batch');
+          r.isValid = false;
+        }
+      }
+    }
   },
 
   validateRow(row) {
@@ -354,6 +393,21 @@ const BulkUpload = {
     }
   },
 
+  renderGroupSelect(rowIdx, currentValue) {
+    // Merge available groups with groups from parsed data
+    const allGroups = new Set(this.availableGroups);
+    for (const r of this.parsedRows) {
+      if (r.data.group) allGroups.add(r.data.group);
+    }
+    const sorted = [...allGroups].sort((a, b) => a.localeCompare(b));
+    const options = [`<option value="">--</option>`];
+    for (const g of sorted) {
+      options.push(`<option value="${escapeAttr(g)}" ${g === currentValue ? 'selected' : ''}>${escapeAttr(g)}</option>`);
+    }
+    options.push(`<option value="__add_new__">+ Add New...</option>`);
+    return `<select class="staging-cell-input staging-group-select" data-row="${rowIdx}" data-field="group">${options.join('')}</select>`;
+  },
+
   renderStagingRows() {
     const tbody = document.getElementById('staging-tbody');
     const FREQS = [60, 300, 900, 1800, 3600];
@@ -369,7 +423,7 @@ const BulkUpload = {
       html += `<tr class="${r.isValid ? 'staging-row-valid' : 'staging-row-invalid'}">
         <td style="text-align:center;color:var(--color-text-tertiary)">${r.rowNum}</td>
         <td style="text-align:center"><span class="status-dot ${r.isValid ? 'up' : 'down'}" style="display:inline-block"></span></td>
-        <td><input type="text" class="staging-cell-input" data-row="${i}" data-field="group" value="${escapeAttr(d.group || '')}"></td>
+        <td>${this.renderGroupSelect(i, d.group || '')}</td>
         <td><input type="text" class="staging-cell-input ${r.errors.some(e => e.includes('url')) ? 'has-error' : ''}" data-row="${i}" data-field="url" value="${escapeAttr(d.url || '')}"></td>
         <td><input type="text" class="staging-cell-input" data-row="${i}" data-field="name" value="${escapeAttr(d.name || '')}"></td>
         <td>
@@ -402,6 +456,29 @@ const BulkUpload = {
         const field = e.target.dataset.field;
         let value = e.target.value;
 
+        // Handle "Add New" group option
+        if (field === 'group' && value === '__add_new__') {
+          const newGroup = prompt('Enter new group name:');
+          if (newGroup && newGroup.trim()) {
+            const trimmed = newGroup.trim();
+            if (trimmed.length > 100) {
+              alert('Group name must be 100 characters or fewer');
+              e.target.value = this.parsedRows[rowIdx].data.group || '';
+              return;
+            }
+            if (!this.availableGroups.includes(trimmed)) {
+              this.availableGroups.push(trimmed);
+            }
+            this.parsedRows[rowIdx].data.group = trimmed;
+          } else {
+            e.target.value = this.parsedRows[rowIdx].data.group || '';
+            return;
+          }
+          this.validateRow(this.parsedRows[rowIdx]);
+          this.refreshStaging();
+          return;
+        }
+
         if (field === 'frequency') value = parseInt(value, 10);
         else if (field === 'expectedStatus') value = parseInt(value, 10);
         else if (field === 'timeoutMs') value = parseInt(value, 10);
@@ -423,6 +500,10 @@ const BulkUpload = {
   },
 
   refreshStaging() {
+    // Re-validate all rows including batch duplicate checks
+    this.parsedRows.forEach(r => this.validateRow(r));
+    this.checkBatchDuplicates(this.parsedRows);
+
     const validCount = this.parsedRows.filter(r => r.isValid).length;
     const invalidCount = this.parsedRows.length - validCount;
 

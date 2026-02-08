@@ -19,12 +19,46 @@ router.post('/monitors/bulk', express.json({ limit: '1mb' }), (req, res) => {
   const results = { created: [], failed: [] };
   const validMonitors = [];
 
+  // Collect existing URLs and names for duplicate checking
+  const existingUrls = new Set(
+    db.prepare('SELECT url FROM monitors').all().map(r => r.url)
+  );
+  const existingNames = new Set(
+    db.prepare('SELECT name FROM monitors').all().map(r => r.name)
+  );
+  // Track URLs and names within the current batch too
+  const batchUrls = new Set();
+  const batchNames = new Set();
+
   for (let i = 0; i < monitors.length; i++) {
     const errors = validateMonitorData(monitors[i]);
+    const d = monitors[i];
+
+    // Duplicate URL check (against DB and current batch)
+    if (d.url) {
+      if (existingUrls.has(d.url)) {
+        errors.push('A monitor with this URL already exists');
+      } else if (batchUrls.has(d.url)) {
+        errors.push('Duplicate URL within this upload batch');
+      }
+    }
+
+    // Duplicate name check (against DB and current batch)
+    const monitorName = d.name || (d.url ? (() => { try { return new URL(d.url).hostname; } catch { return ''; } })() : '');
+    if (monitorName) {
+      if (existingNames.has(monitorName)) {
+        errors.push('A monitor with this name already exists');
+      } else if (batchNames.has(monitorName)) {
+        errors.push('Duplicate name within this upload batch');
+      }
+    }
+
     if (errors.length > 0) {
       results.failed.push({ rowIndex: i, errors });
     } else {
-      validMonitors.push({ index: i, data: monitors[i] });
+      batchUrls.add(d.url);
+      if (monitorName) batchNames.add(monitorName);
+      validMonitors.push({ index: i, data: d });
     }
   }
 

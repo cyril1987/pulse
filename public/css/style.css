@@ -1113,6 +1113,21 @@ select.staging-cell-input {
   background: rgba(156, 163, 175, 0.1);
 }
 
+/* Group Select */
+.group-select-wrapper {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.group-select-wrapper select {
+  flex: 1;
+}
+
+.staging-group-select {
+  min-width: 100px;
+}
+
 /* Responsive */
 @media (max-width: 768px) {
   .container { padding: 1.25rem; }
