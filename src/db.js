@@ -32,9 +32,17 @@ try {
   // Tables/columns already exist — ignore
 }
 
+// Migration 004 drops and recreates the users table, which requires
+// temporarily disabling foreign keys (monitors.user_id references users.id)
 try {
-  db.exec(fs.readFileSync(path.join(__dirname, '..', 'migrations', '004-add-microsoft-sso.sql'), 'utf8'));
+  const cols = db.prepare("PRAGMA table_info(users)").all().map(c => c.name);
+  if (!cols.includes('microsoft_id')) {
+    db.pragma('foreign_keys = OFF');
+    db.exec(fs.readFileSync(path.join(__dirname, '..', 'migrations', '004-add-microsoft-sso.sql'), 'utf8'));
+    db.pragma('foreign_keys = ON');
+  }
 } catch (e) {
+  db.pragma('foreign_keys = ON');
   // Migration already applied — ignore
 }
 
