@@ -33,7 +33,7 @@ if (config.google.clientId && config.google.clientSecret) {
 
       if (user) {
         db.prepare(
-          'UPDATE users SET last_login_at = datetime("now"), name = ?, avatar_url = ? WHERE id = ?'
+          "UPDATE users SET last_login_at = datetime('now'), name = ?, avatar_url = ? WHERE id = ?"
         ).run(profile.displayName, profile.photos?.[0]?.value || null, user.id);
       } else {
         const result = db.prepare(
