@@ -146,24 +146,13 @@ const Chart = {
 
     if (!values || values.length === 0) return;
 
-    const successVals = values.map((v) => (v.isSuccess ? v.responseTimeMs : null));
-    const filtered = successVals.filter((v) => v !== null);
-    if (filtered.length === 0) return;
-
-    const minVal = Math.min(...filtered);
-    const maxVal = Math.max(...filtered);
-    const range = maxVal - minVal || 1;
     const pad = 2;
 
     function xPos(i) {
       return pad + (i / (values.length - 1 || 1)) * (w - pad * 2);
     }
 
-    function yPos(val) {
-      return pad + (h - pad * 2) - ((val - minVal) / range) * (h - pad * 2);
-    }
-
-    // Draw failure bars
+    // Draw failure bars first (always, even if all checks failed)
     for (let i = 0; i < values.length; i++) {
       if (!values[i].isSuccess) {
         ctx.fillStyle = failColor;
@@ -172,6 +161,19 @@ const Chart = {
         ctx.fillRect(xPos(i) - bw / 2, 0, bw, h);
         ctx.globalAlpha = 1;
       }
+    }
+
+    // Draw success line and gradient only if there are successful checks
+    const successVals = values.map((v) => (v.isSuccess ? v.responseTimeMs : null));
+    const filtered = successVals.filter((v) => v !== null);
+    if (filtered.length === 0) return;
+
+    const minVal = Math.min(...filtered);
+    const maxVal = Math.max(...filtered);
+    const range = maxVal - minVal || 1;
+
+    function yPos(val) {
+      return pad + (h - pad * 2) - ((val - minVal) / range) * (h - pad * 2);
     }
 
     // Gradient fill

@@ -34,6 +34,41 @@
       align-items: center;
       justify-content: center;
       -webkit-font-smoothing: antialiased;
+      overflow: hidden;
+      position: relative;
+    }
+
+    /* Animated background */
+    .bg-canvas {
+      position: fixed;
+      inset: 0;
+      z-index: 0;
+      pointer-events: none;
+    }
+
+    /* Film grain */
+    .grain {
+      position: fixed;
+      inset: 0;
+      z-index: 1;
+      pointer-events: none;
+      opacity: 0.035;
+      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+      background-size: 128px 128px;
+    }
+
+    /* Radial glow behind card */
+    .bg-glow {
+      position: fixed;
+      width: 600px;
+      height: 600px;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      z-index: 0;
+      border-radius: 50%;
+      background: radial-gradient(circle, rgba(42, 157, 143, 0.08) 0%, transparent 70%);
+      pointer-events: none;
     }
 
     .login-container {
@@ -41,6 +76,8 @@
       max-width: 400px;
       width: 100%;
       padding: 2rem;
+      position: relative;
+      z-index: 2;
     }
 
     .login-logo {
@@ -150,6 +187,9 @@
   </style>
 </head>
 <body>
+  <canvas class="bg-canvas" id="bg-canvas"></canvas>
+  <div class="grain"></div>
+  <div class="bg-glow"></div>
   <div class="login-container">
     <img src="/images/logo.svg" alt="iConcile" class="login-logo">
     <h1 class="login-title">iConcile Pulse</h1>
@@ -191,6 +231,119 @@
       el.textContent = 'Your account is not authorized to access this application. Please contact your administrator.';
       el.style.display = 'block';
     }
+
+    // Check available auth providers and show dev login if no SSO configured
+    fetch('/auth/providers').then(r => r.json()).then(providers => {
+      if (providers.devLogin) {
+        const card = document.querySelector('.login-card');
+        const devBtn = document.createElement('div');
+        devBtn.innerHTML = `
+          <div class="sso-divider">development mode</div>
+          <button class="sso-btn" onclick="devLogin()" style="background:var(--color-primary);color:#fff;border:1px solid var(--color-primary);cursor:pointer;">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/>
+            </svg>
+            Dev Login (No SSO)
+          </button>
+        `;
+        card.appendChild(devBtn);
+      }
+      if (!providers.google) {
+        const googleBtn = document.querySelector('.sso-btn-google');
+        if (googleBtn) { googleBtn.style.opacity = '0.4'; googleBtn.style.pointerEvents = 'none'; }
+      }
+      if (!providers.microsoft) {
+        const msBtn = document.querySelector('.sso-btn-microsoft');
+        if (msBtn) { msBtn.style.opacity = '0.4'; msBtn.style.pointerEvents = 'none'; }
+      }
+    }).catch(() => {});
+
+    async function devLogin() {
+      try {
+        const res = await fetch('/auth/dev-login', { method: 'POST' });
+        if (res.ok) {
+          window.location.href = '/';
+        } else {
+          const el = document.getElementById('login-error');
+          el.textContent = 'Dev login failed.';
+          el.style.display = 'block';
+        }
+      } catch (e) {
+        const el = document.getElementById('login-error');
+        el.textContent = 'Dev login failed: ' + e.message;
+        el.style.display = 'block';
+      }
+    }
+
+    // Animated background — floating network of connected orbs
+    (function () {
+      const canvas = document.getElementById('bg-canvas');
+      const ctx = canvas.getContext('2d');
+      let w, h;
+
+      function resize() {
+        w = canvas.width = window.innerWidth;
+        h = canvas.height = window.innerHeight;
+      }
+      resize();
+      window.addEventListener('resize', resize);
+
+      const PARTICLE_COUNT = 50;
+      const CONNECTION_DIST = 160;
+      const particles = [];
+
+      for (let i = 0; i < PARTICLE_COUNT; i++) {
+        particles.push({
+          x: Math.random() * w,
+          y: Math.random() * h,
+          vx: (Math.random() - 0.5) * 0.4,
+          vy: (Math.random() - 0.5) * 0.4,
+          r: Math.random() * 2 + 1,
+          color: Math.random() > 0.7 ? 'rgba(42, 157, 143,' : 'rgba(255, 255, 255,',
+        });
+      }
+
+      function frame() {
+        ctx.clearRect(0, 0, w, h);
+
+        // Update & draw particles
+        for (const p of particles) {
+          p.x += p.vx;
+          p.y += p.vy;
+          if (p.x < 0) p.x = w;
+          if (p.x > w) p.x = 0;
+          if (p.y < 0) p.y = h;
+          if (p.y > h) p.y = 0;
+
+          ctx.beginPath();
+          ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+          ctx.fillStyle = p.color + '0.4)';
+          ctx.fill();
+        }
+
+        // Draw connections
+        for (let i = 0; i < particles.length; i++) {
+          for (let j = i + 1; j < particles.length; j++) {
+            const dx = particles[i].x - particles[j].x;
+            const dy = particles[i].y - particles[j].y;
+            const dist = Math.sqrt(dx * dx + dy * dy);
+            if (dist < CONNECTION_DIST) {
+              const alpha = (1 - dist / CONNECTION_DIST) * 0.12;
+              ctx.strokeStyle = 'rgba(42, 157, 143,' + alpha + ')';
+              ctx.lineWidth = 0.5;
+              ctx.beginPath();
+              ctx.moveTo(particles[i].x, particles[i].y);
+              ctx.lineTo(particles[j].x, particles[j].y);
+              ctx.stroke();
+            }
+          }
+        }
+
+        requestAnimationFrame(frame);
+      }
+
+      frame();
+    })();
   </script>
 </body>
 </html>
