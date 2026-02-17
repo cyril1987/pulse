@@ -28,6 +28,38 @@ router.get('/auth/microsoft/callback',
   }
 );
 
+// Dev login — available only when no SSO providers are configured
+const config = require('../config');
+const db = require('../db');
+const hasGoogle = !!(config.google.clientId && config.google.clientSecret);
+const hasMicrosoft = !!(config.microsoft.clientId && config.microsoft.clientSecret);
+
+if (!hasGoogle && !hasMicrosoft) {
+  router.post('/auth/dev-login', (req, res) => {
+    // Find or create a local dev user
+    let user = db.prepare("SELECT * FROM users WHERE email = 'dev@localhost'").get();
+    if (!user) {
+      const result = db.prepare(
+        "INSERT INTO users (email, name) VALUES ('dev@localhost', 'Local Developer')"
+      ).run();
+      user = { id: result.lastInsertRowid, email: 'dev@localhost', name: 'Local Developer' };
+    }
+    req.login(user, (err) => {
+      if (err) return res.status(500).json({ error: 'Login failed' });
+      res.json({ ok: true });
+    });
+  });
+
+  // Expose dev-login availability
+  router.get('/auth/providers', (req, res) => {
+    res.json({ google: hasGoogle, microsoft: hasMicrosoft, devLogin: true });
+  });
+} else {
+  router.get('/auth/providers', (req, res) => {
+    res.json({ google: hasGoogle, microsoft: hasMicrosoft, devLogin: false });
+  });
+}
+
 // Logout
 router.post('/auth/logout', (req, res) => {
   req.logout(() => {

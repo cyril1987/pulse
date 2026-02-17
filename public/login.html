@@ -232,6 +232,49 @@
       el.style.display = 'block';
     }
 
+    // Check available auth providers and show dev login if no SSO configured
+    fetch('/auth/providers').then(r => r.json()).then(providers => {
+      if (providers.devLogin) {
+        const card = document.querySelector('.login-card');
+        const devBtn = document.createElement('div');
+        devBtn.innerHTML = `
+          <div class="sso-divider">development mode</div>
+          <button class="sso-btn" onclick="devLogin()" style="background:var(--color-primary);color:#fff;border:1px solid var(--color-primary);cursor:pointer;">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/>
+            </svg>
+            Dev Login (No SSO)
+          </button>
+        `;
+        card.appendChild(devBtn);
+      }
+      if (!providers.google) {
+        const googleBtn = document.querySelector('.sso-btn-google');
+        if (googleBtn) { googleBtn.style.opacity = '0.4'; googleBtn.style.pointerEvents = 'none'; }
+      }
+      if (!providers.microsoft) {
+        const msBtn = document.querySelector('.sso-btn-microsoft');
+        if (msBtn) { msBtn.style.opacity = '0.4'; msBtn.style.pointerEvents = 'none'; }
+      }
+    }).catch(() => {});
+
+    async function devLogin() {
+      try {
+        const res = await fetch('/auth/dev-login', { method: 'POST' });
+        if (res.ok) {
+          window.location.href = '/';
+        } else {
+          const el = document.getElementById('login-error');
+          el.textContent = 'Dev login failed.';
+          el.style.display = 'block';
+        }
+      } catch (e) {
+        const el = document.getElementById('login-error');
+        el.textContent = 'Dev login failed: ' + e.message;
+        el.style.display = 'block';
+      }
+    }
+
     // Animated background — floating network of connected orbs
     (function () {
       const canvas = document.getElementById('bg-canvas');
