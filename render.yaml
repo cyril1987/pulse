@@ -2,7 +2,7 @@ services:
   - type: web
     name: iconcile-pulse
     runtime: node
-    plan: starter
+    plan: free
     buildCommand: npm install
     startCommand: node server.js
     envVars:
@@ -11,7 +11,7 @@ services:
       - key: PORT
         value: "3000"
       - key: DB_PATH
-        value: /data/urlmonitor.db
+        value: ./data/urlmonitor.db
       - key: SESSION_SECRET
         generateValue: true
       - key: GOOGLE_CLIENT_ID
@@ -52,7 +52,3 @@ services:
         value: "60000"
       - key: FAILURES_BEFORE_ALERT
         value: "2"
-    disk:
-      name: pulse-data
-      mountPath: /data
-      sizeGB: 1
