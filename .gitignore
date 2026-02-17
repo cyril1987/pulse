@@ -4,3 +4,8 @@ data/
 *.db
 *.db-wal
 *.db-shm
+
+# iSmart Crawler
+scripts/downloads/*
+!scripts/downloads/.gitkeep
+scripts/.browser-state.json

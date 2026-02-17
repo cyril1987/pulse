@@ -1,0 +1,9 @@
+{
+  "sources": [
+    {
+      "name": "iSmart Group Tickets",
+      "url": "https://ismart.sutherlandglobal.com/ServiceManagement/processAdmin/101/ITIncident/GroupTickets/list",
+      "downloadSelector": ""
+    }
+  ]
+}
