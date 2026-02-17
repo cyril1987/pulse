@@ -1,14 +1,5 @@
 const db = require('../db');
 
-const insertCheck = db.prepare(`
-  INSERT INTO checks (monitor_id, status_code, response_time_ms, is_success, error_message)
-  VALUES (?, ?, ?, ?, ?)
-`);
-
-const updateLastChecked = db.prepare(
-  "UPDATE monitors SET last_checked_at = datetime('now') WHERE id = ?"
-);
-
 async function checkMonitor(monitor) {
   const startTime = Date.now();
   let statusCode = null;
@@ -53,8 +44,14 @@ async function checkMonitor(monitor) {
     errorMessage = classifyError(err);
   }
 
-  insertCheck.run(monitor.id, statusCode, responseTimeMs, isSuccess ? 1 : 0, errorMessage);
-  updateLastChecked.run(monitor.id);
+  await db.prepare(`
+    INSERT INTO checks (monitor_id, status_code, response_time_ms, is_success, error_message)
+    VALUES (?, ?, ?, ?, ?)
+  `).run(monitor.id, statusCode, responseTimeMs, isSuccess ? 1 : 0, errorMessage);
+
+  await db.prepare(
+    "UPDATE monitors SET last_checked_at = datetime('now') WHERE id = ?"
+  ).run(monitor.id);
 
   return { statusCode, responseTimeMs, isSuccess, errorMessage };
 }

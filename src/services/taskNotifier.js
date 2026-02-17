@@ -19,22 +19,16 @@ function getTransporter() {
   return transporter;
 }
 
-const logNotification = db.prepare(
-  'INSERT INTO task_notifications (task_id, type, email, details) VALUES (?, ?, ?, ?)'
-);
-
-const checkRecentNotification = db.prepare(`
-  SELECT COUNT(*) AS count FROM task_notifications
-  WHERE task_id = ? AND type = ?
-  AND sent_at > datetime('now', '-1 hour')
-`);
-
 // ─── Notify on task assignment ──────────────────────────────────────────────
 
 async function notifyAssignment(task, assignedUser, assignedByName) {
   if (!assignedUser || !assignedUser.email) return;
 
-  const recent = checkRecentNotification.get(task.id, 'assigned');
+  const recent = await db.prepare(`
+    SELECT COUNT(*) AS count FROM task_notifications
+    WHERE task_id = ? AND type = ?
+    AND sent_at > datetime('now', '-1 hour')
+  `).get(task.id, 'assigned');
   if (recent.count > 0) return;
 
   const subject = `[TASK] Assigned to you: ${task.title}`;
@@ -57,7 +51,9 @@ async function notifyAssignment(task, assignedUser, assignedByName) {
       subject,
       text,
     });
-    logNotification.run(task.id, 'assigned', assignedUser.email, JSON.stringify({ assignedBy: assignedByName }));
+    await db.prepare(
+      'INSERT INTO task_notifications (task_id, type, email, details) VALUES (?, ?, ?, ?)'
+    ).run(task.id, 'assigned', assignedUser.email, JSON.stringify({ assignedBy: assignedByName }));
     console.log(`[TASK-NOTIFY] Assignment notification sent for "${task.title}" to ${assignedUser.email}`);
   } catch (err) {
     console.error(`[TASK-NOTIFY] Failed to send assignment notification:`, err.message);
@@ -69,10 +65,14 @@ async function notifyAssignment(task, assignedUser, assignedByName) {
 async function notifyStatusChange(task, oldStatus, newStatus, changedByName) {
   if (!task.assigned_to) return;
 
-  const assignee = db.prepare('SELECT email, name FROM users WHERE id = ?').get(task.assigned_to);
+  const assignee = await db.prepare('SELECT email, name FROM users WHERE id = ?').get(task.assigned_to);
   if (!assignee) return;
 
-  const recent = checkRecentNotification.get(task.id, 'status_change');
+  const recent = await db.prepare(`
+    SELECT COUNT(*) AS count FROM task_notifications
+    WHERE task_id = ? AND type = ?
+    AND sent_at > datetime('now', '-1 hour')
+  `).get(task.id, 'status_change');
   if (recent.count > 0) return;
 
   const subject = `[TASK] Status changed: ${task.title} — ${oldStatus} → ${newStatus}`;
@@ -93,7 +93,9 @@ async function notifyStatusChange(task, oldStatus, newStatus, changedByName) {
       subject,
       text,
     });
-    logNotification.run(task.id, 'status_change', assignee.email, JSON.stringify({ oldStatus, newStatus, changedBy: changedByName }));
+    await db.prepare(
+      'INSERT INTO task_notifications (task_id, type, email, details) VALUES (?, ?, ?, ?)'
+    ).run(task.id, 'status_change', assignee.email, JSON.stringify({ oldStatus, newStatus, changedBy: changedByName }));
     console.log(`[TASK-NOTIFY] Status change notification sent for "${task.title}" to ${assignee.email}`);
   } catch (err) {
     console.error(`[TASK-NOTIFY] Failed to send status change notification:`, err.message);
@@ -109,7 +111,7 @@ async function checkDueSoonTasks() {
   if (Date.now() - lastDueSoonCheck < 3600000) return;
   lastDueSoonCheck = Date.now();
 
-  const tasks = db.prepare(`
+  const tasks = await db.prepare(`
     SELECT t.*, u.email AS user_email, u.name AS user_name
     FROM tasks t
     JOIN users u ON t.assigned_to = u.id
@@ -121,7 +123,11 @@ async function checkDueSoonTasks() {
   `).all();
 
   for (const task of tasks) {
-    const recent = checkRecentNotification.get(task.id, 'due_soon');
+    const recent = await db.prepare(`
+      SELECT COUNT(*) AS count FROM task_notifications
+      WHERE task_id = ? AND type = ?
+      AND sent_at > datetime('now', '-1 hour')
+    `).get(task.id, 'due_soon');
     if (recent.count > 0) continue;
 
     const subject = `[TASK] Due soon: ${task.title} — due ${task.due_date}`;
@@ -143,7 +149,9 @@ async function checkDueSoonTasks() {
         subject,
         text,
       });
-      logNotification.run(task.id, 'due_soon', task.user_email, JSON.stringify({ dueDate: task.due_date }));
+      await db.prepare(
+        'INSERT INTO task_notifications (task_id, type, email, details) VALUES (?, ?, ?, ?)'
+      ).run(task.id, 'due_soon', task.user_email, JSON.stringify({ dueDate: task.due_date }));
       console.log(`[TASK-NOTIFY] Due-soon notification sent for "${task.title}" to ${task.user_email}`);
     } catch (err) {
       console.error(`[TASK-NOTIFY] Failed to send due-soon notification:`, err.message);
@@ -160,7 +168,7 @@ async function checkOverdueTasks() {
   if (Date.now() - lastOverdueCheck < 3600000) return;
   lastOverdueCheck = Date.now();
 
-  const tasks = db.prepare(`
+  const tasks = await db.prepare(`
     SELECT t.*, u.email AS user_email, u.name AS user_name
     FROM tasks t
     JOIN users u ON t.assigned_to = u.id
@@ -171,7 +179,11 @@ async function checkOverdueTasks() {
   `).all();
 
   for (const task of tasks) {
-    const recent = checkRecentNotification.get(task.id, 'overdue');
+    const recent = await db.prepare(`
+      SELECT COUNT(*) AS count FROM task_notifications
+      WHERE task_id = ? AND type = ?
+      AND sent_at > datetime('now', '-1 hour')
+    `).get(task.id, 'overdue');
     if (recent.count > 0) continue;
 
     const subject = `[TASK] Overdue: ${task.title} — was due ${task.due_date}`;
@@ -193,7 +205,9 @@ async function checkOverdueTasks() {
         subject,
         text,
       });
-      logNotification.run(task.id, 'overdue', task.user_email, JSON.stringify({ dueDate: task.due_date }));
+      await db.prepare(
+        'INSERT INTO task_notifications (task_id, type, email, details) VALUES (?, ?, ?, ?)'
+      ).run(task.id, 'overdue', task.user_email, JSON.stringify({ dueDate: task.due_date }));
       console.log(`[TASK-NOTIFY] Overdue notification sent for "${task.title}" to ${task.user_email}`);
     } catch (err) {
       console.error(`[TASK-NOTIFY] Failed to send overdue notification:`, err.message);

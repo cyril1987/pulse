@@ -34,39 +34,36 @@ const db = require('../db');
 const hasGoogle = !!(config.google.clientId && config.google.clientSecret);
 const hasMicrosoft = !!(config.microsoft.clientId && config.microsoft.clientSecret);
 
-if (!hasGoogle && !hasMicrosoft) {
-  router.post('/auth/dev-login', (req, res) => {
-    // Find or create a local dev user
-    let user = db.prepare("SELECT * FROM users WHERE email = 'dev@localhost'").get();
-    if (!user) {
-      const result = db.prepare(
-        "INSERT INTO users (email, name) VALUES ('dev@localhost', 'Local Developer')"
-      ).run();
-      user = { id: result.lastInsertRowid, email: 'dev@localhost', name: 'Local Developer' };
-    }
-    req.login(user, (err) => {
-      if (err) return res.status(500).json({ error: 'Login failed' });
-      res.json({ ok: true });
-    });
-  });
+const enableDevLogin = !hasGoogle && !hasMicrosoft || process.env.DEV_LOGIN === 'true';
 
-  // Expose dev-login availability
-  router.get('/auth/providers', (req, res) => {
-    res.json({ google: hasGoogle, microsoft: hasMicrosoft, devLogin: true });
+// Dev login — always register the route; guarded by enableDevLogin flag
+router.post('/auth/dev-login', async (req, res) => {
+  if (!enableDevLogin) {
+    return res.status(403).json({ error: 'Dev login is disabled' });
+  }
+  // Find or create a local dev user
+  let user = await db.prepare("SELECT * FROM users WHERE email = 'dev@localhost'").get();
+  if (!user) {
+    const result = await db.prepare(
+      "INSERT INTO users (email, name) VALUES ('dev@localhost', 'Local Developer')"
+    ).run();
+    user = { id: result.lastInsertRowid, email: 'dev@localhost', name: 'Local Developer' };
+  }
+  req.login(user, (err) => {
+    if (err) return res.status(500).json({ error: 'Login failed' });
+    res.json({ ok: true });
   });
-} else {
-  router.get('/auth/providers', (req, res) => {
-    res.json({ google: hasGoogle, microsoft: hasMicrosoft, devLogin: false });
-  });
-}
+});
+
+router.get('/auth/providers', (req, res) => {
+  res.json({ google: hasGoogle, microsoft: hasMicrosoft, devLogin: enableDevLogin });
+});
 
 // Logout
 router.post('/auth/logout', (req, res) => {
   req.logout(() => {
-    req.session.destroy(() => {
-      res.clearCookie('connect.sid');
-      res.json({ ok: true });
-    });
+    req.session = null; // cookie-session: clear by setting to null
+    res.json({ ok: true });
   });
 });
 

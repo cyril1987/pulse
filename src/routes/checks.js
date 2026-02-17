@@ -3,8 +3,8 @@ const router = express.Router();
 const db = require('../db');
 
 // Get paginated check history for a monitor
-router.get('/monitors/:id/checks', (req, res) => {
-  const monitorExists = db.prepare('SELECT id FROM monitors WHERE id = ?').get(req.params.id);
+router.get('/monitors/:id/checks', async (req, res) => {
+  const monitorExists = await db.prepare('SELECT id FROM monitors WHERE id = ?').get(req.params.id);
   if (!monitorExists) {
     return res.status(404).json({ error: 'Monitor not found' });
   }
@@ -12,14 +12,14 @@ router.get('/monitors/:id/checks', (req, res) => {
   const limit = Math.min(parseInt(req.query.limit || '50', 10), 500);
   const offset = parseInt(req.query.offset || '0', 10);
 
-  const checks = db.prepare(`
+  const checks = await db.prepare(`
     SELECT * FROM checks
     WHERE monitor_id = ?
     ORDER BY checked_at DESC
     LIMIT ? OFFSET ?
   `).all(req.params.id, limit, offset);
 
-  const total = db.prepare(
+  const total = await db.prepare(
     'SELECT COUNT(*) as count FROM checks WHERE monitor_id = ?'
   ).get(req.params.id);
 
@@ -32,15 +32,15 @@ router.get('/monitors/:id/checks', (req, res) => {
 });
 
 // Get latest N checks (for sparklines)
-router.get('/monitors/:id/checks/latest', (req, res) => {
-  const monitorExists = db.prepare('SELECT id FROM monitors WHERE id = ?').get(req.params.id);
+router.get('/monitors/:id/checks/latest', async (req, res) => {
+  const monitorExists = await db.prepare('SELECT id FROM monitors WHERE id = ?').get(req.params.id);
   if (!monitorExists) {
     return res.status(404).json({ error: 'Monitor not found' });
   }
 
   const limit = Math.min(parseInt(req.query.limit || '20', 10), 100);
 
-  const checks = db.prepare(`
+  const checks = await db.prepare(`
     SELECT * FROM checks
     WHERE monitor_id = ?
     ORDER BY checked_at DESC
@@ -51,8 +51,8 @@ router.get('/monitors/:id/checks/latest', (req, res) => {
 });
 
 // Get aggregated stats for a monitor
-router.get('/monitors/:id/stats', (req, res) => {
-  const monitorExists = db.prepare('SELECT id FROM monitors WHERE id = ?').get(req.params.id);
+router.get('/monitors/:id/stats', async (req, res) => {
+  const monitorExists = await db.prepare('SELECT id FROM monitors WHERE id = ?').get(req.params.id);
   if (!monitorExists) {
     return res.status(404).json({ error: 'Monitor not found' });
   }
@@ -66,7 +66,7 @@ router.get('/monitors/:id/stats', (req, res) => {
 
   const stats = {};
   for (const w of windows) {
-    const row = db.prepare(`
+    const row = await db.prepare(`
       SELECT
         COUNT(*) as total_checks,
         SUM(CASE WHEN is_success = 1 THEN 1 ELSE 0 END) as successful_checks,

@@ -12,30 +12,6 @@ let lastTickAt = null;
 let lastTickDurationMs = null;
 let lastTickError = null;
 
-const getDueMonitors = db.prepare(`
-  SELECT * FROM monitors
-  WHERE is_active = 1
-  AND (
-    last_checked_at IS NULL
-    OR datetime(last_checked_at, '+' || frequency_seconds || ' seconds') <= datetime('now')
-  )
-`);
-
-const getExpiredDowntime = db.prepare(`
-  SELECT * FROM monitors
-  WHERE is_active = 0
-  AND paused_until IS NOT NULL
-  AND paused_until <= datetime('now')
-`);
-
-const resumeMonitor = db.prepare(`
-  UPDATE monitors SET is_active = 1, paused_until = NULL, updated_at = datetime('now') WHERE id = ?
-`);
-
-const deleteOldChecks = db.prepare(
-  "DELETE FROM checks WHERE checked_at < datetime('now', '-' || ? || ' days')"
-);
-
 function start() {
   if (running) return;
   running = true;
@@ -50,13 +26,28 @@ async function tick() {
 
   try {
     // Auto-resume monitors whose scheduled downtime has expired
-    const expired = getExpiredDowntime.all();
+    const expired = await db.prepare(`
+      SELECT * FROM monitors
+      WHERE is_active = 0
+      AND paused_until IS NOT NULL
+      AND paused_until <= datetime('now')
+    `).all();
+
     for (const m of expired) {
-      resumeMonitor.run(m.id);
+      await db.prepare(`
+        UPDATE monitors SET is_active = 1, paused_until = NULL, updated_at = datetime('now') WHERE id = ?
+      `).run(m.id);
       console.log(`[SCHEDULER] Auto-resumed ${m.name} — scheduled downtime ended`);
     }
 
-    const dueMonitors = getDueMonitors.all();
+    const dueMonitors = await db.prepare(`
+      SELECT * FROM monitors
+      WHERE is_active = 1
+      AND (
+        last_checked_at IS NULL
+        OR datetime(last_checked_at, '+' || frequency_seconds || ' seconds') <= datetime('now')
+      )
+    `).all();
 
     if (dueMonitors.length > 0) {
       console.log(`[SCHEDULER] Checking ${dueMonitors.length} monitor(s)`);
@@ -83,11 +74,11 @@ async function tick() {
       }
     }
 
-    maybeCleanup();
+    await maybeCleanup();
 
     // Process recurring task instances
     try {
-      taskScheduler.tick();
+      await taskScheduler.tick();
     } catch (err) {
       console.error('[SCHEDULER] Task scheduler error:', err);
     }
@@ -122,10 +113,12 @@ async function tick() {
   }
 }
 
-function maybeCleanup() {
+async function maybeCleanup() {
   if (Date.now() - lastCleanup < 3600000) return;
   lastCleanup = Date.now();
-  const result = deleteOldChecks.run(config.checkRetentionDays);
+  const result = await db.prepare(
+    "DELETE FROM checks WHERE checked_at < datetime('now', '-' || ? || ' days')"
+  ).run(config.checkRetentionDays);
   if (result.changes > 0) {
     console.log(`[SCHEDULER] Cleaned up ${result.changes} old check records`);
   }

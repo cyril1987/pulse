@@ -6,8 +6,8 @@ const { checkMonitor } = require('../services/checker');
 const { evaluateAndNotify } = require('../services/notifier');
 
 // List all monitors with 24h stats (shared across all users)
-router.get('/', (req, res) => {
-  const monitors = db.prepare(`
+router.get('/', async (req, res) => {
+  const monitors = await db.prepare(`
     SELECT m.*,
       (SELECT ROUND(
         CAST(SUM(CASE WHEN c.is_success = 1 THEN 1 ELSE 0 END) AS REAL) /
@@ -30,16 +30,16 @@ router.get('/', (req, res) => {
 });
 
 // List distinct group names (must come before /:id)
-router.get('/groups', (req, res) => {
-  const rows = db.prepare(
+router.get('/groups', async (req, res) => {
+  const rows = await db.prepare(
     'SELECT DISTINCT group_name FROM monitors WHERE group_name IS NOT NULL ORDER BY group_name'
   ).all();
   res.json(rows.map(r => r.group_name));
 });
 
 // Get single monitor
-router.get('/:id', (req, res) => {
-  const monitor = db.prepare(`
+router.get('/:id', async (req, res) => {
+  const monitor = await db.prepare(`
     SELECT m.*,
       (SELECT ROUND(
         CAST(SUM(CASE WHEN c.is_success = 1 THEN 1 ELSE 0 END) AS REAL) /
@@ -66,18 +66,18 @@ router.get('/:id', (req, res) => {
 });
 
 // Create a new monitor
-router.post('/', validateMonitor, (req, res) => {
+router.post('/', validateMonitor, async (req, res) => {
   const { url, name, frequency, expectedStatus, timeoutMs, notifyEmail, customHeaders, group } = req.body;
 
   // Duplicate URL check
-  const existingUrl = db.prepare('SELECT id FROM monitors WHERE url = ?').get(url);
+  const existingUrl = await db.prepare('SELECT id FROM monitors WHERE url = ?').get(url);
   if (existingUrl) {
     return res.status(400).json({ errors: ['A monitor with this URL already exists'] });
   }
 
   // Duplicate name check (only if name is provided)
   const monitorName = name || new URL(url).hostname;
-  const existingName = db.prepare('SELECT id FROM monitors WHERE name = ?').get(monitorName);
+  const existingName = await db.prepare('SELECT id FROM monitors WHERE name = ?').get(monitorName);
   if (existingName) {
     return res.status(400).json({ errors: ['A monitor with this name already exists'] });
   }
@@ -87,7 +87,7 @@ router.post('/', validateMonitor, (req, res) => {
     : null;
   const groupName = group && typeof group === 'string' && group.trim() ? group.trim() : null;
 
-  const result = db.prepare(`
+  const result = await db.prepare(`
     INSERT INTO monitors (url, name, frequency_seconds, expected_status, timeout_ms, notify_email, custom_headers, group_name)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
@@ -101,13 +101,13 @@ router.post('/', validateMonitor, (req, res) => {
     groupName
   );
 
-  const monitor = db.prepare('SELECT * FROM monitors WHERE id = ?').get(result.lastInsertRowid);
+  const monitor = await db.prepare('SELECT * FROM monitors WHERE id = ?').get(result.lastInsertRowid);
   res.status(201).json(formatMonitor(monitor));
 });
 
 // Update a monitor
-router.put('/:id', validateMonitor, (req, res) => {
-  const existing = db.prepare('SELECT * FROM monitors WHERE id = ?').get(req.params.id);
+router.put('/:id', validateMonitor, async (req, res) => {
+  const existing = await db.prepare('SELECT * FROM monitors WHERE id = ?').get(req.params.id);
   if (!existing) {
     return res.status(404).json({ error: 'Monitor not found' });
   }
@@ -115,14 +115,14 @@ router.put('/:id', validateMonitor, (req, res) => {
   const { url, name, frequency, expectedStatus, timeoutMs, notifyEmail, customHeaders, group } = req.body;
 
   // Duplicate URL check (exclude current monitor)
-  const existingUrl = db.prepare('SELECT id FROM monitors WHERE url = ? AND id != ?').get(url, req.params.id);
+  const existingUrl = await db.prepare('SELECT id FROM monitors WHERE url = ? AND id != ?').get(url, req.params.id);
   if (existingUrl) {
     return res.status(400).json({ errors: ['A monitor with this URL already exists'] });
   }
 
   // Duplicate name check (exclude current monitor)
   const monitorName = name || new URL(url).hostname;
-  const existingName = db.prepare('SELECT id FROM monitors WHERE name = ? AND id != ?').get(monitorName, req.params.id);
+  const existingName = await db.prepare('SELECT id FROM monitors WHERE name = ? AND id != ?').get(monitorName, req.params.id);
   if (existingName) {
     return res.status(400).json({ errors: ['A monitor with this name already exists'] });
   }
@@ -132,7 +132,7 @@ router.put('/:id', validateMonitor, (req, res) => {
     : null;
   const groupName = group && typeof group === 'string' && group.trim() ? group.trim() : null;
 
-  db.prepare(`
+  await db.prepare(`
     UPDATE monitors
     SET url = ?, name = ?, frequency_seconds = ?, expected_status = ?,
         timeout_ms = ?, notify_email = ?, custom_headers = ?, group_name = ?,
@@ -150,24 +150,24 @@ router.put('/:id', validateMonitor, (req, res) => {
     req.params.id
   );
 
-  const monitor = db.prepare('SELECT * FROM monitors WHERE id = ?').get(req.params.id);
+  const monitor = await db.prepare('SELECT * FROM monitors WHERE id = ?').get(req.params.id);
   res.json(formatMonitor(monitor));
 });
 
 // Delete a monitor
-router.delete('/:id', (req, res) => {
-  const existing = db.prepare('SELECT * FROM monitors WHERE id = ?').get(req.params.id);
+router.delete('/:id', async (req, res) => {
+  const existing = await db.prepare('SELECT * FROM monitors WHERE id = ?').get(req.params.id);
   if (!existing) {
     return res.status(404).json({ error: 'Monitor not found' });
   }
 
-  db.prepare('DELETE FROM monitors WHERE id = ?').run(req.params.id);
+  await db.prepare('DELETE FROM monitors WHERE id = ?').run(req.params.id);
   res.status(204).end();
 });
 
 // Pause a monitor
-router.post('/:id/pause', (req, res) => {
-  const result = db.prepare(
+router.post('/:id/pause', async (req, res) => {
+  const result = await db.prepare(
     "UPDATE monitors SET is_active = 0, paused_until = NULL, updated_at = datetime('now') WHERE id = ?"
   ).run(req.params.id);
 
@@ -175,13 +175,13 @@ router.post('/:id/pause', (req, res) => {
     return res.status(404).json({ error: 'Monitor not found' });
   }
 
-  const monitor = db.prepare('SELECT * FROM monitors WHERE id = ?').get(req.params.id);
+  const monitor = await db.prepare('SELECT * FROM monitors WHERE id = ?').get(req.params.id);
   res.json(formatMonitor(monitor));
 });
 
 // Resume a monitor
-router.post('/:id/resume', (req, res) => {
-  const result = db.prepare(
+router.post('/:id/resume', async (req, res) => {
+  const result = await db.prepare(
     "UPDATE monitors SET is_active = 1, paused_until = NULL, updated_at = datetime('now') WHERE id = ?"
   ).run(req.params.id);
 
@@ -189,13 +189,13 @@ router.post('/:id/resume', (req, res) => {
     return res.status(404).json({ error: 'Monitor not found' });
   }
 
-  const monitor = db.prepare('SELECT * FROM monitors WHERE id = ?').get(req.params.id);
+  const monitor = await db.prepare('SELECT * FROM monitors WHERE id = ?').get(req.params.id);
   res.json(formatMonitor(monitor));
 });
 
 // Register scheduled downtime with duration
-router.post('/:id/downtime', (req, res) => {
-  const existing = db.prepare('SELECT * FROM monitors WHERE id = ?').get(req.params.id);
+router.post('/:id/downtime', async (req, res) => {
+  const existing = await db.prepare('SELECT * FROM monitors WHERE id = ?').get(req.params.id);
   if (!existing) {
     return res.status(404).json({ error: 'Monitor not found' });
   }
@@ -210,22 +210,22 @@ router.post('/:id/downtime', (req, res) => {
   }
 
   if (duration === 0) {
-    db.prepare(
+    await db.prepare(
       "UPDATE monitors SET is_active = 0, paused_until = NULL, updated_at = datetime('now') WHERE id = ?"
     ).run(req.params.id);
   } else {
-    db.prepare(
+    await db.prepare(
       "UPDATE monitors SET is_active = 0, paused_until = datetime('now', '+' || ? || ' seconds'), updated_at = datetime('now') WHERE id = ?"
     ).run(duration, req.params.id);
   }
 
-  const monitor = db.prepare('SELECT * FROM monitors WHERE id = ?').get(req.params.id);
+  const monitor = await db.prepare('SELECT * FROM monitors WHERE id = ?').get(req.params.id);
   res.json(formatMonitor(monitor));
 });
 
 // Instant check — run a check immediately without waiting for the scheduler
 router.post('/:id/check', async (req, res) => {
-  const monitor = db.prepare('SELECT * FROM monitors WHERE id = ?').get(req.params.id);
+  const monitor = await db.prepare('SELECT * FROM monitors WHERE id = ?').get(req.params.id);
   if (!monitor) {
     return res.status(404).json({ error: 'Monitor not found' });
   }
@@ -234,7 +234,7 @@ router.post('/:id/check', async (req, res) => {
     const result = await checkMonitor(monitor);
     await evaluateAndNotify(monitor, result);
 
-    const updated = db.prepare('SELECT * FROM monitors WHERE id = ?').get(req.params.id);
+    const updated = await db.prepare('SELECT * FROM monitors WHERE id = ?').get(req.params.id);
     res.json({
       monitor: formatMonitor(updated),
       check: {

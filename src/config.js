@@ -1,6 +1,9 @@
 module.exports = {
   port: parseInt(process.env.PORT || '3000', 10),
-  dbPath: process.env.DB_PATH || './data/urlmonitor.db',
+  turso: {
+    url: process.env.TURSO_DATABASE_URL || 'file:./data/local.db',
+    authToken: process.env.TURSO_AUTH_TOKEN || '',
+  },
   smtp: {
     host: process.env.SMTP_HOST || 'localhost',
     port: parseInt(process.env.SMTP_PORT || '587', 10),
@@ -34,4 +37,5 @@ module.exports = {
     userEmail: process.env.JIRA_USER_EMAIL || '',
     apiToken: process.env.JIRA_API_TOKEN || '',
   },
+  cronSecret: process.env.CRON_SECRET || '',
 };

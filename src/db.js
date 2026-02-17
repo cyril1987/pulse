@@ -1,97 +1,165 @@
-const Database = require('better-sqlite3');
+const { createClient } = require('@libsql/client');
 const fs = require('fs');
 const path = require('path');
 const config = require('./config');
 
-const dbDir = path.dirname(config.dbPath);
-if (!fs.existsSync(dbDir)) {
-  fs.mkdirSync(dbDir, { recursive: true });
-}
+// ─── Create Turso/LibSQL client ─────────────────────────────────────────────
 
-const db = new Database(config.dbPath);
+const client = createClient({
+  url: config.turso.url,
+  authToken: config.turso.authToken,
+});
 
-db.pragma('journal_mode = WAL');
-db.pragma('foreign_keys = ON');
+// ─── Adapter: mimic better-sqlite3 API but async ────────────────────────────
+//
+// better-sqlite3 usage:     db.prepare(sql).get(...params)   (sync)
+// Turso/LibSQL usage:  await db.prepare(sql).get(...params)   (async)
+//
+// This adapter lets us keep the same call-sites: db.prepare(sql).get/run/all()
+// The only change in calling code is adding `await` in front.
 
-const schema = fs.readFileSync(
-  path.join(__dirname, '..', 'migrations', '001-initial-schema.sql'),
-  'utf8'
-);
-db.exec(schema);
+const db = {
+  /**
+   * Returns a statement-like object with async get/run/all methods.
+   */
+  prepare(sql) {
+    return {
+      async get(...args) {
+        const rs = await client.execute({ sql, args });
+        if (rs.rows.length === 0) return undefined;
+        return rowToObject(rs.rows[0], rs.columns);
+      },
 
-// Run incremental migrations (safe to re-run)
-try {
-  db.exec(fs.readFileSync(path.join(__dirname, '..', 'migrations', '002-add-paused-until.sql'), 'utf8'));
-} catch (e) {
-  // Column already exists — ignore
-}
+      async run(...args) {
+        const rs = await client.execute({ sql, args });
+        return {
+          changes: rs.rowsAffected,
+          lastInsertRowid: rs.lastInsertRowid ? Number(rs.lastInsertRowid) : 0,
+        };
+      },
 
-try {
-  db.exec(fs.readFileSync(path.join(__dirname, '..', 'migrations', '003-add-users.sql'), 'utf8'));
-} catch (e) {
-  // Tables/columns already exist — ignore
-}
+      async all(...args) {
+        const rs = await client.execute({ sql, args });
+        return rs.rows.map(row => rowToObject(row, rs.columns));
+      },
+    };
+  },
 
-// Migration 004 drops and recreates the users table, which requires
-// temporarily disabling foreign keys (monitors.user_id references users.id)
-try {
-  const cols = db.prepare("PRAGMA table_info(users)").all().map(c => c.name);
-  if (!cols.includes('microsoft_id')) {
-    db.pragma('foreign_keys = OFF');
-    db.exec(fs.readFileSync(path.join(__dirname, '..', 'migrations', '004-add-microsoft-sso.sql'), 'utf8'));
-    db.pragma('foreign_keys = ON');
+  /**
+   * Execute raw SQL (multiple statements). Used for migrations.
+   */
+  async exec(sql) {
+    await client.executeMultiple(sql);
+  },
+
+  /**
+   * Run a group of operations in a transaction.
+   * Usage:
+   *   await db.transaction(async (tx) => {
+   *     await tx.prepare('INSERT ...').run(val1, val2);
+   *   });
+   */
+  async transaction(fn) {
+    const tx = await client.transaction('write');
+    try {
+      // Add a prepare() helper on the transaction object
+      tx.prepare = (sql) => ({
+        async get(...args) {
+          const rs = await tx.execute({ sql, args });
+          if (rs.rows.length === 0) return undefined;
+          return rowToObject(rs.rows[0], rs.columns);
+        },
+        async run(...args) {
+          const rs = await tx.execute({ sql, args });
+          return {
+            changes: rs.rowsAffected,
+            lastInsertRowid: rs.lastInsertRowid ? Number(rs.lastInsertRowid) : 0,
+          };
+        },
+        async all(...args) {
+          const rs = await tx.execute({ sql, args });
+          return rs.rows.map(row => rowToObject(row, rs.columns));
+        },
+      });
+
+      const result = await fn(tx);
+      await tx.commit();
+      return result;
+    } catch (err) {
+      await tx.rollback();
+      throw err;
+    }
+  },
+
+  /**
+   * Execute a PRAGMA statement. Turso/LibSQL supports a subset of PRAGMAs.
+   */
+  async pragma(statement) {
+    try {
+      await client.execute(`PRAGMA ${statement}`);
+    } catch {
+      // Some PRAGMAs are not supported by Turso — ignore silently
+    }
+  },
+};
+
+// ─── Helpers ────────────────────────────────────────────────────────────────
+
+/**
+ * Convert a LibSQL Row to a plain object with column names as keys.
+ */
+function rowToObject(row, columns) {
+  if (!row) return undefined;
+  const obj = {};
+  for (const col of columns) {
+    let val = row[col];
+    // Convert BigInt to Number for compatibility with existing code
+    if (typeof val === 'bigint') {
+      val = Number(val);
+    }
+    obj[col] = val;
   }
-} catch (e) {
-  db.pragma('foreign_keys = ON');
-  // Migration already applied — ignore
+  return obj;
 }
 
-try {
-  db.exec(fs.readFileSync(path.join(__dirname, '..', 'migrations', '005-add-custom-headers.sql'), 'utf8'));
-} catch (e) {
-  // Column already exists — ignore
-}
+// ─── Run Migrations ─────────────────────────────────────────────────────────
 
-try {
-  db.exec(fs.readFileSync(path.join(__dirname, '..', 'migrations', '006-add-monitor-groups.sql'), 'utf8'));
-} catch (e) {
-  // Column already exists — ignore
-}
+async function runMigrations() {
+  const migrationsDir = path.join(__dirname, '..', 'migrations');
+  const migrationFiles = [
+    '001-initial-schema.sql',
+    '002-add-paused-until.sql',
+    '003-add-users.sql',
+    '004-add-microsoft-sso.sql',
+    '005-add-custom-headers.sql',
+    '006-add-monitor-groups.sql',
+    '007-add-tasks.sql',
+    '008-add-jira-integration.sql',
+    '009-add-private-tasks.sql',
+    '010-add-ismart-tickets.sql',
+  ];
 
-try {
-  db.exec(fs.readFileSync(path.join(__dirname, '..', 'migrations', '007-add-tasks.sql'), 'utf8'));
-} catch (e) {
-  // Tables already exist — ignore
-}
+  for (const file of migrationFiles) {
+    const filePath = path.join(migrationsDir, file);
+    if (!fs.existsSync(filePath)) continue;
 
-try {
-  db.exec(fs.readFileSync(path.join(__dirname, '..', 'migrations', '008-add-jira-integration.sql'), 'utf8'));
-} catch (e) {
-  // Columns already exist — ignore
-}
-
-try {
-  db.exec(fs.readFileSync(path.join(__dirname, '..', 'migrations', '009-add-private-tasks.sql'), 'utf8'));
-} catch (e) {
-  // Column already exists — ignore
-}
-
-try {
-  db.exec(fs.readFileSync(path.join(__dirname, '..', 'migrations', '010-add-ismart-tickets.sql'), 'utf8'));
-} catch (e) {
-  // Table/indexes already exist — ignore
-}
-
-// Ensure sessions table has the correct schema expected by better-sqlite3-session-store.
-// The library expects columns: (sid, sess, expire). If the table exists with a different
-// schema (e.g. 'expired' instead of 'expire'), drop it so the library can recreate it.
-try {
-  const cols = db.prepare("PRAGMA table_info(sessions)").all().map(c => c.name);
-  if (cols.length > 0 && !cols.includes('expire')) {
-    db.exec('DROP TABLE sessions');
+    const sql = fs.readFileSync(filePath, 'utf8');
+    try {
+      await client.executeMultiple(sql);
+    } catch (e) {
+      // Migration already applied or column already exists — ignore
+      // This matches the original better-sqlite3 behavior of try/catch per migration
+    }
   }
-} catch (e) {
-  // Table doesn't exist yet — that's fine, the session store will create it
+
+  console.log('[DB] Migrations complete');
 }
+
+// ─── Initialize ─────────────────────────────────────────────────────────────
+
+// Export the db adapter immediately, but also export a promise for migration readiness.
+// The app must `await dbReady` before handling requests.
+const dbReady = runMigrations().then(() => db);
 
 module.exports = db;
+module.exports.dbReady = dbReady;

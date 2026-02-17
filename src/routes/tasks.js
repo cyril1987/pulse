@@ -58,7 +58,7 @@ function formatComment(row) {
   };
 }
 
-function buildTaskQuery(conditions, params, { limit, offset, sort }) {
+async function buildTaskQuery(conditions, params, { limit, offset, sort }) {
   const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 
   let orderBy;
@@ -95,8 +95,8 @@ function buildTaskQuery(conditions, params, { limit, offset, sort }) {
 
   const countQuery = `SELECT COUNT(*) AS count FROM tasks t ${where}`;
 
-  const tasks = db.prepare(tasksQuery).all(...params, limit, offset);
-  const total = db.prepare(countQuery).get(...params);
+  const tasks = await db.prepare(tasksQuery).all(...params, limit, offset);
+  const total = await db.prepare(countQuery).get(...params);
 
   return { tasks: tasks.map(formatTask), total: total.count, limit, offset };
 }
@@ -135,8 +135,8 @@ function applyFilters(req) {
   return { conditions, params, limit, offset, sort };
 }
 
-function addSystemComment(taskId, userId, body) {
-  db.prepare(
+async function addSystemComment(taskId, userId, body) {
+  await db.prepare(
     'INSERT INTO task_comments (task_id, user_id, body, is_system) VALUES (?, ?, ?, 1)'
   ).run(taskId, userId, body);
 }
@@ -167,12 +167,12 @@ function computeNextOccurrence(pattern, currentDateStr) {
 
 // ─── Category Routes ────────────────────────────────────────────────────────
 
-router.get('/categories', (req, res) => {
-  const categories = db.prepare('SELECT * FROM task_categories ORDER BY name').all();
+router.get('/categories', async (req, res) => {
+  const categories = await db.prepare('SELECT * FROM task_categories ORDER BY name').all();
   res.json(categories.map(c => ({ id: c.id, name: c.name, color: c.color, createdAt: c.created_at })));
 });
 
-router.post('/categories', (req, res) => {
+router.post('/categories', async (req, res) => {
   const { name, color } = req.body;
   if (!name || typeof name !== 'string' || name.trim().length === 0) {
     return res.status(400).json({ errors: ['Category name is required'] });
@@ -181,21 +181,21 @@ router.post('/categories', (req, res) => {
     return res.status(400).json({ errors: ['Category name must be 100 characters or fewer'] });
   }
 
-  const existing = db.prepare('SELECT id FROM task_categories WHERE name = ?').get(name.trim());
+  const existing = await db.prepare('SELECT id FROM task_categories WHERE name = ?').get(name.trim());
   if (existing) {
     return res.status(400).json({ errors: ['A category with this name already exists'] });
   }
 
-  const result = db.prepare(
+  const result = await db.prepare(
     'INSERT INTO task_categories (name, color) VALUES (?, ?)'
   ).run(name.trim(), color || '#2a9d8f');
 
-  const category = db.prepare('SELECT * FROM task_categories WHERE id = ?').get(result.lastInsertRowid);
+  const category = await db.prepare('SELECT * FROM task_categories WHERE id = ?').get(result.lastInsertRowid);
   res.status(201).json({ id: category.id, name: category.name, color: category.color, createdAt: category.created_at });
 });
 
-router.put('/categories/:id', (req, res) => {
-  const existing = db.prepare('SELECT * FROM task_categories WHERE id = ?').get(req.params.id);
+router.put('/categories/:id', async (req, res) => {
+  const existing = await db.prepare('SELECT * FROM task_categories WHERE id = ?').get(req.params.id);
   if (!existing) {
     return res.status(404).json({ error: 'Category not found' });
   }
@@ -205,34 +205,34 @@ router.put('/categories/:id', (req, res) => {
     return res.status(400).json({ errors: ['Category name is required'] });
   }
 
-  const duplicate = db.prepare('SELECT id FROM task_categories WHERE name = ? AND id != ?').get(name.trim(), req.params.id);
+  const duplicate = await db.prepare('SELECT id FROM task_categories WHERE name = ? AND id != ?').get(name.trim(), req.params.id);
   if (duplicate) {
     return res.status(400).json({ errors: ['A category with this name already exists'] });
   }
 
-  db.prepare('UPDATE task_categories SET name = ?, color = ? WHERE id = ?').run(
+  await db.prepare('UPDATE task_categories SET name = ?, color = ? WHERE id = ?').run(
     name.trim(), color || existing.color, req.params.id
   );
 
-  const category = db.prepare('SELECT * FROM task_categories WHERE id = ?').get(req.params.id);
+  const category = await db.prepare('SELECT * FROM task_categories WHERE id = ?').get(req.params.id);
   res.json({ id: category.id, name: category.name, color: category.color, createdAt: category.created_at });
 });
 
-router.delete('/categories/:id', (req, res) => {
-  const existing = db.prepare('SELECT * FROM task_categories WHERE id = ?').get(req.params.id);
+router.delete('/categories/:id', async (req, res) => {
+  const existing = await db.prepare('SELECT * FROM task_categories WHERE id = ?').get(req.params.id);
   if (!existing) {
     return res.status(404).json({ error: 'Category not found' });
   }
 
-  db.prepare('UPDATE tasks SET category_id = NULL WHERE category_id = ?').run(req.params.id);
-  db.prepare('DELETE FROM task_categories WHERE id = ?').run(req.params.id);
+  await db.prepare('UPDATE tasks SET category_id = NULL WHERE category_id = ?').run(req.params.id);
+  await db.prepare('DELETE FROM task_categories WHERE id = ?').run(req.params.id);
   res.status(204).end();
 });
 
 // ─── Users Route (for assignment dropdowns) ─────────────────────────────────
 
-router.get('/users', (req, res) => {
-  const users = db.prepare('SELECT id, email, name, avatar_url FROM users ORDER BY name').all();
+router.get('/users', async (req, res) => {
+  const users = await db.prepare('SELECT id, email, name, avatar_url FROM users ORDER BY name').all();
   res.json(users.map(u => ({
     id: u.id,
     email: u.email,
@@ -243,7 +243,7 @@ router.get('/users', (req, res) => {
 
 // ─── Stats ──────────────────────────────────────────────────────────────────
 
-router.get('/stats', (req, res) => {
+router.get('/stats', async (req, res) => {
   const view = req.query.view;
   let userFilter = '';
   const params = [];
@@ -253,7 +253,7 @@ router.get('/stats', (req, res) => {
     params.push(req.user.id);
   }
 
-  const counts = db.prepare(`
+  const counts = await db.prepare(`
     SELECT
       COUNT(*) AS total,
       SUM(CASE WHEN status = 'todo' THEN 1 ELSE 0 END) AS todo,
@@ -265,14 +265,14 @@ router.get('/stats', (req, res) => {
     WHERE is_recurring_template = 0 AND parent_task_id IS NULL ${userFilter}
   `).get(...params);
 
-  const byPriority = db.prepare(`
+  const byPriority = await db.prepare(`
     SELECT priority, COUNT(*) AS count
     FROM tasks
     WHERE is_recurring_template = 0 AND parent_task_id IS NULL AND status NOT IN ('done', 'cancelled') ${userFilter}
     GROUP BY priority
   `).all(...params);
 
-  const upcoming = db.prepare(`
+  const upcoming = await db.prepare(`
     SELECT id, title, due_date, priority, status, assigned_to,
       (SELECT name FROM users WHERE id = tasks.assigned_to) AS assigned_to_name
     FROM tasks
@@ -309,8 +309,8 @@ router.get('/stats', (req, res) => {
 
 // ─── Recurring Templates ────────────────────────────────────────────────────
 
-router.get('/recurring', (req, res) => {
-  const templates = db.prepare(`
+router.get('/recurring', async (req, res) => {
+  const templates = await db.prepare(`
     SELECT t.*,
       u1.name AS assigned_to_name, u1.avatar_url AS assigned_to_avatar,
       u2.name AS created_by_name,
@@ -333,17 +333,17 @@ router.get('/recurring', (req, res) => {
 
 // ─── My Tasks ───────────────────────────────────────────────────────────────
 
-router.get('/', (req, res) => {
+router.get('/', async (req, res) => {
   const { conditions, params, limit, offset, sort } = applyFilters(req);
   conditions.push('t.assigned_to = ?');
   params.push(req.user.id);
 
-  res.json(buildTaskQuery(conditions, params, { limit, offset, sort }));
+  res.json(await buildTaskQuery(conditions, params, { limit, offset, sort }));
 });
 
 // ─── All Tasks ──────────────────────────────────────────────────────────────
 
-router.get('/all', (req, res) => {
+router.get('/all', async (req, res) => {
   const { conditions, params, limit, offset, sort } = applyFilters(req);
 
   // Private tasks: only visible to the owner (assigned_to or created_by)
@@ -359,7 +359,7 @@ router.get('/all', (req, res) => {
     params.push(parseInt(req.query.createdBy, 10));
   }
 
-  res.json(buildTaskQuery(conditions, params, { limit, offset, sort }));
+  res.json(await buildTaskQuery(conditions, params, { limit, offset, sort }));
 });
 
 // ─── Jira Search (must be before /:id to avoid matching "jira" as an ID) ──
@@ -385,8 +385,8 @@ router.get('/jira/search', async (req, res) => {
 
 // ─── Single Task ────────────────────────────────────────────────────────────
 
-router.get('/:id', (req, res) => {
-  const task = db.prepare(`
+router.get('/:id', async (req, res) => {
+  const task = await db.prepare(`
     SELECT t.*,
       u1.name AS assigned_to_name, u1.avatar_url AS assigned_to_avatar,
       u2.name AS created_by_name,
@@ -408,7 +408,7 @@ router.get('/:id', (req, res) => {
 
 // ─── Create Task ────────────────────────────────────────────────────────────
 
-router.post('/', validateTask, (req, res) => {
+router.post('/', validateTask, async (req, res) => {
   const {
     title, description, source, sourceRef, priority, status,
     dueDate, assignedTo, categoryId, parentTaskId,
@@ -424,8 +424,8 @@ router.post('/', validateTask, (req, res) => {
     recurrenceNextAt = new Date(startDate + 'T00:00:00Z').toISOString().replace('T', ' ').replace(/\.\d+Z$/, '');
   }
 
-  const createTask = db.transaction(() => {
-    const result = db.prepare(`
+  const taskId = await db.transaction(async (tx) => {
+    const result = await tx.prepare(`
       INSERT INTO tasks (
         title, description, source, source_ref, priority, status, due_date,
         assigned_to, created_by, category_id, parent_task_id,
@@ -452,21 +452,23 @@ router.post('/', validateTask, (req, res) => {
     );
 
     const taskId = result.lastInsertRowid;
-    addSystemComment(taskId, req.user.id, `${req.user.name} created this task`);
+    await tx.prepare(
+      'INSERT INTO task_comments (task_id, user_id, body, is_system) VALUES (?, ?, ?, 1)'
+    ).run(taskId, req.user.id, `${req.user.name} created this task`);
 
     if (assignedTo && parseInt(assignedTo, 10) !== req.user.id) {
-      const assignee = db.prepare('SELECT name FROM users WHERE id = ?').get(parseInt(assignedTo, 10));
+      const assignee = await tx.prepare('SELECT name FROM users WHERE id = ?').get(parseInt(assignedTo, 10));
       if (assignee) {
-        addSystemComment(taskId, req.user.id, `${req.user.name} assigned this task to ${assignee.name}`);
+        await tx.prepare(
+          'INSERT INTO task_comments (task_id, user_id, body, is_system) VALUES (?, ?, ?, 1)'
+        ).run(taskId, req.user.id, `${req.user.name} assigned this task to ${assignee.name}`);
       }
     }
 
     return taskId;
   });
 
-  const taskId = createTask();
-
-  const task = db.prepare(`
+  const task = await db.prepare(`
     SELECT t.*,
       u1.name AS assigned_to_name, u1.avatar_url AS assigned_to_avatar,
       u2.name AS created_by_name,
@@ -484,8 +486,8 @@ router.post('/', validateTask, (req, res) => {
 
 // ─── Update Task ────────────────────────────────────────────────────────────
 
-router.put('/:id', validateTask, (req, res) => {
-  const existing = db.prepare('SELECT * FROM tasks WHERE id = ?').get(req.params.id);
+router.put('/:id', validateTask, async (req, res) => {
+  const existing = await db.prepare('SELECT * FROM tasks WHERE id = ?').get(req.params.id);
   if (!existing) {
     return res.status(404).json({ error: 'Task not found' });
   }
@@ -504,8 +506,8 @@ router.put('/:id', validateTask, (req, res) => {
     recurrenceNextAt = new Date(startDate + 'T00:00:00Z').toISOString().replace('T', ' ').replace(/\.\d+Z$/, '');
   }
 
-  const updateTask = db.transaction(() => {
-    db.prepare(`
+  await db.transaction(async (tx) => {
+    await tx.prepare(`
       UPDATE tasks SET
         title = ?, description = ?, source = ?, source_ref = ?, priority = ?,
         status = ?, due_date = ?, assigned_to = ?, category_id = ?, parent_task_id = ?,
@@ -534,17 +536,17 @@ router.put('/:id', validateTask, (req, res) => {
     // Track assignment change
     const newAssignedTo = assignedTo ? parseInt(assignedTo, 10) : null;
     if (newAssignedTo !== existing.assigned_to) {
-      const assignee = newAssignedTo ? db.prepare('SELECT name FROM users WHERE id = ?').get(newAssignedTo) : null;
+      const assignee = newAssignedTo ? await tx.prepare('SELECT name FROM users WHERE id = ?').get(newAssignedTo) : null;
       const msg = assignee
         ? `${req.user.name} assigned this task to ${assignee.name}`
         : `${req.user.name} unassigned this task`;
-      addSystemComment(existing.id, req.user.id, msg);
+      await tx.prepare(
+        'INSERT INTO task_comments (task_id, user_id, body, is_system) VALUES (?, ?, ?, 1)'
+      ).run(existing.id, req.user.id, msg);
     }
   });
 
-  updateTask();
-
-  const task = db.prepare(`
+  const task = await db.prepare(`
     SELECT t.*,
       u1.name AS assigned_to_name, u1.avatar_url AS assigned_to_avatar,
       u2.name AS created_by_name,
@@ -562,32 +564,32 @@ router.put('/:id', validateTask, (req, res) => {
 
 // ─── Delete Task ────────────────────────────────────────────────────────────
 
-router.delete('/:id', (req, res) => {
-  const existing = db.prepare('SELECT * FROM tasks WHERE id = ?').get(req.params.id);
+router.delete('/:id', async (req, res) => {
+  const existing = await db.prepare('SELECT * FROM tasks WHERE id = ?').get(req.params.id);
   if (!existing) {
     return res.status(404).json({ error: 'Task not found' });
   }
 
-  db.prepare('DELETE FROM tasks WHERE id = ?').run(req.params.id);
+  await db.prepare('DELETE FROM tasks WHERE id = ?').run(req.params.id);
   res.status(204).end();
 });
 
 // ─── Toggle Private ──────────────────────────────────────────────────────────
 
-router.post('/:id/toggle-private', (req, res) => {
-  const existing = db.prepare('SELECT * FROM tasks WHERE id = ?').get(req.params.id);
+router.post('/:id/toggle-private', async (req, res) => {
+  const existing = await db.prepare('SELECT * FROM tasks WHERE id = ?').get(req.params.id);
   if (!existing) {
     return res.status(404).json({ error: 'Task not found' });
   }
 
   const newPrivate = existing.is_private === 1 ? 0 : 1;
-  db.prepare('UPDATE tasks SET is_private = ?, updated_at = datetime(\'now\') WHERE id = ?').run(newPrivate, req.params.id);
+  await db.prepare('UPDATE tasks SET is_private = ?, updated_at = datetime(\'now\') WHERE id = ?').run(newPrivate, req.params.id);
 
-  addSystemComment(existing.id, req.user.id,
+  await addSystemComment(existing.id, req.user.id,
     newPrivate ? `${req.user.name} marked this task as private` : `${req.user.name} removed private flag from this task`
   );
 
-  const task = db.prepare(`
+  const task = await db.prepare(`
     SELECT t.*,
       u1.name AS assigned_to_name, u1.avatar_url AS assigned_to_avatar,
       u2.name AS created_by_name,
@@ -605,7 +607,7 @@ router.post('/:id/toggle-private', (req, res) => {
 
 // ─── Transition Status ──────────────────────────────────────────────────────
 
-router.post('/:id/transition', (req, res) => {
+router.post('/:id/transition', async (req, res) => {
   const { status } = req.body;
   const validStatuses = ['todo', 'in_progress', 'done', 'cancelled'];
 
@@ -613,7 +615,7 @@ router.post('/:id/transition', (req, res) => {
     return res.status(400).json({ errors: [`Status must be one of: ${validStatuses.join(', ')}`] });
   }
 
-  const existing = db.prepare('SELECT * FROM tasks WHERE id = ?').get(req.params.id);
+  const existing = await db.prepare('SELECT * FROM tasks WHERE id = ?').get(req.params.id);
   if (!existing) {
     return res.status(404).json({ error: 'Task not found' });
   }
@@ -622,23 +624,23 @@ router.post('/:id/transition', (req, res) => {
     return res.status(400).json({ errors: ['Task is already in this status'] });
   }
 
-  const transitionTask = db.transaction(() => {
-    db.prepare(
+  await db.transaction(async (tx) => {
+    await tx.prepare(
       "UPDATE tasks SET status = ?, updated_at = datetime('now') WHERE id = ?"
     ).run(status, req.params.id);
 
     const oldLabel = existing.status.replace('_', ' ');
     const newLabel = status.replace('_', ' ');
-    addSystemComment(
+    await tx.prepare(
+      'INSERT INTO task_comments (task_id, user_id, body, is_system) VALUES (?, ?, ?, 1)'
+    ).run(
       existing.id,
       req.user.id,
       `${req.user.name} changed status from ${oldLabel} to ${newLabel}`
     );
   });
 
-  transitionTask();
-
-  const task = db.prepare(`
+  const task = await db.prepare(`
     SELECT t.*,
       u1.name AS assigned_to_name, u1.avatar_url AS assigned_to_avatar,
       u2.name AS created_by_name,
@@ -657,7 +659,7 @@ router.post('/:id/transition', (req, res) => {
 // ─── Jira Link/Unlink/Sync ──────────────────────────────────────────────────
 
 router.post('/:id/link-jira', async (req, res) => {
-  const existing = db.prepare('SELECT * FROM tasks WHERE id = ?').get(req.params.id);
+  const existing = await db.prepare('SELECT * FROM tasks WHERE id = ?').get(req.params.id);
   if (!existing) {
     return res.status(404).json({ error: 'Task not found' });
   }
@@ -679,7 +681,7 @@ router.post('/:id/link-jira', async (req, res) => {
   try {
     const issue = await jiraService.fetchIssue(key);
 
-    db.prepare(`
+    await db.prepare(`
       UPDATE tasks SET
         jira_key = ?, jira_status = ?, jira_summary = ?, jira_assignee = ?,
         jira_due_date = ?, jira_url = ?, jira_synced_at = datetime('now'),
@@ -690,12 +692,12 @@ router.post('/:id/link-jira', async (req, res) => {
       issue.dueDate, issue.url, req.params.id
     );
 
-    addSystemComment(
+    await addSystemComment(
       existing.id, req.user.id,
       `${req.user.name} linked Jira issue ${issue.key} (status: ${issue.status})`
     );
 
-    const task = db.prepare(`
+    const task = await db.prepare(`
       SELECT t.*,
         u1.name AS assigned_to_name, u1.avatar_url AS assigned_to_avatar,
         u2.name AS created_by_name,
@@ -715,8 +717,8 @@ router.post('/:id/link-jira', async (req, res) => {
   }
 });
 
-router.delete('/:id/link-jira', (req, res) => {
-  const existing = db.prepare('SELECT * FROM tasks WHERE id = ?').get(req.params.id);
+router.delete('/:id/link-jira', async (req, res) => {
+  const existing = await db.prepare('SELECT * FROM tasks WHERE id = ?').get(req.params.id);
   if (!existing) {
     return res.status(404).json({ error: 'Task not found' });
   }
@@ -727,7 +729,7 @@ router.delete('/:id/link-jira', (req, res) => {
 
   const oldKey = existing.jira_key;
 
-  db.prepare(`
+  await db.prepare(`
     UPDATE tasks SET
       jira_key = NULL, jira_status = NULL, jira_summary = NULL,
       jira_assignee = NULL, jira_due_date = NULL, jira_url = NULL,
@@ -735,12 +737,12 @@ router.delete('/:id/link-jira', (req, res) => {
     WHERE id = ?
   `).run(req.params.id);
 
-  addSystemComment(
+  await addSystemComment(
     existing.id, req.user.id,
     `${req.user.name} unlinked Jira issue ${oldKey}`
   );
 
-  const task = db.prepare(`
+  const task = await db.prepare(`
     SELECT t.*,
       u1.name AS assigned_to_name, u1.avatar_url AS assigned_to_avatar,
       u2.name AS created_by_name,
@@ -757,7 +759,7 @@ router.delete('/:id/link-jira', (req, res) => {
 });
 
 router.post('/:id/sync-jira', async (req, res) => {
-  const existing = db.prepare('SELECT * FROM tasks WHERE id = ?').get(req.params.id);
+  const existing = await db.prepare('SELECT * FROM tasks WHERE id = ?').get(req.params.id);
   if (!existing) {
     return res.status(404).json({ error: 'Task not found' });
   }
@@ -774,7 +776,7 @@ router.post('/:id/sync-jira', async (req, res) => {
     const issue = await jiraService.fetchIssue(existing.jira_key);
     const oldStatus = existing.jira_status;
 
-    db.prepare(`
+    await db.prepare(`
       UPDATE tasks SET
         jira_status = ?, jira_summary = ?, jira_assignee = ?,
         jira_due_date = ?, jira_url = ?, jira_synced_at = datetime('now'),
@@ -786,13 +788,13 @@ router.post('/:id/sync-jira', async (req, res) => {
     );
 
     if (oldStatus && oldStatus !== issue.status) {
-      addSystemComment(
+      await addSystemComment(
         existing.id, req.user.id,
         `Jira status changed: ${oldStatus} → ${issue.status}`
       );
     }
 
-    const task = db.prepare(`
+    const task = await db.prepare(`
       SELECT t.*,
         u1.name AS assigned_to_name, u1.avatar_url AS assigned_to_avatar,
         u2.name AS created_by_name,
@@ -814,13 +816,13 @@ router.post('/:id/sync-jira', async (req, res) => {
 
 // ─── Comments ───────────────────────────────────────────────────────────────
 
-router.get('/:id/comments', (req, res) => {
-  const existing = db.prepare('SELECT id FROM tasks WHERE id = ?').get(req.params.id);
+router.get('/:id/comments', async (req, res) => {
+  const existing = await db.prepare('SELECT id FROM tasks WHERE id = ?').get(req.params.id);
   if (!existing) {
     return res.status(404).json({ error: 'Task not found' });
   }
 
-  const comments = db.prepare(`
+  const comments = await db.prepare(`
     SELECT tc.*, u.name AS user_name, u.avatar_url AS user_avatar
     FROM task_comments tc
     LEFT JOIN users u ON tc.user_id = u.id
@@ -831,8 +833,8 @@ router.get('/:id/comments', (req, res) => {
   res.json(comments.map(formatComment));
 });
 
-router.post('/:id/comments', (req, res) => {
-  const existing = db.prepare('SELECT id FROM tasks WHERE id = ?').get(req.params.id);
+router.post('/:id/comments', async (req, res) => {
+  const existing = await db.prepare('SELECT id FROM tasks WHERE id = ?').get(req.params.id);
   if (!existing) {
     return res.status(404).json({ error: 'Task not found' });
   }
@@ -845,11 +847,11 @@ router.post('/:id/comments', (req, res) => {
     return res.status(400).json({ errors: ['Comment must be 5000 characters or fewer'] });
   }
 
-  const result = db.prepare(
+  const result = await db.prepare(
     'INSERT INTO task_comments (task_id, user_id, body, is_system) VALUES (?, ?, ?, 0)'
   ).run(req.params.id, req.user.id, body.trim());
 
-  const comment = db.prepare(`
+  const comment = await db.prepare(`
     SELECT tc.*, u.name AS user_name, u.avatar_url AS user_avatar
     FROM task_comments tc
     LEFT JOIN users u ON tc.user_id = u.id
@@ -859,8 +861,8 @@ router.post('/:id/comments', (req, res) => {
   res.status(201).json(formatComment(comment));
 });
 
-router.delete('/:id/comments/:commentId', (req, res) => {
-  const comment = db.prepare('SELECT * FROM task_comments WHERE id = ? AND task_id = ?').get(
+router.delete('/:id/comments/:commentId', async (req, res) => {
+  const comment = await db.prepare('SELECT * FROM task_comments WHERE id = ? AND task_id = ?').get(
     req.params.commentId, req.params.id
   );
 
@@ -872,7 +874,7 @@ router.delete('/:id/comments/:commentId', (req, res) => {
     return res.status(403).json({ error: 'You can only delete your own comments' });
   }
 
-  db.prepare('DELETE FROM task_comments WHERE id = ?').run(req.params.commentId);
+  await db.prepare('DELETE FROM task_comments WHERE id = ?').run(req.params.commentId);
   res.status(204).end();
 });
 

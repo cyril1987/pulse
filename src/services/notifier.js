@@ -19,33 +19,15 @@ function getTransporter() {
   return transporter;
 }
 
-const getRecentChecks = db.prepare(`
-  SELECT is_success FROM checks
-  WHERE monitor_id = ?
-  ORDER BY checked_at DESC
-  LIMIT ?
-`);
-
-const updateStatus = db.prepare(`
-  UPDATE monitors
-  SET current_status = ?, last_status_change_at = datetime('now'), updated_at = datetime('now')
-  WHERE id = ?
-`);
-
-const logNotification = db.prepare(`
-  INSERT INTO notifications (monitor_id, type, email, details) VALUES (?, ?, ?, ?)
-`);
-
-const checkRecentNotification = db.prepare(`
-  SELECT COUNT(*) as count FROM notifications
-  WHERE monitor_id = ? AND type = ?
-  AND sent_at > datetime('now', '-15 minutes')
-`);
-
 async function evaluateAndNotify(monitor, checkResult) {
   const previousStatus = monitor.current_status;
 
-  const recentChecks = getRecentChecks.all(monitor.id, config.failuresBeforeAlert);
+  const recentChecks = await db.prepare(`
+    SELECT is_success FROM checks
+    WHERE monitor_id = ?
+    ORDER BY checked_at DESC
+    LIMIT ?
+  `).all(monitor.id, config.failuresBeforeAlert);
 
   const allRecentFailed =
     recentChecks.length >= config.failuresBeforeAlert &&
@@ -61,7 +43,11 @@ async function evaluateAndNotify(monitor, checkResult) {
   }
 
   if (newStatus !== previousStatus) {
-    updateStatus.run(newStatus, monitor.id);
+    await db.prepare(`
+      UPDATE monitors
+      SET current_status = ?, last_status_change_at = datetime('now'), updated_at = datetime('now')
+      WHERE id = ?
+    `).run(newStatus, monitor.id);
 
     if (
       (previousStatus === 'up' || previousStatus === 'unknown') &&
@@ -75,7 +61,11 @@ async function evaluateAndNotify(monitor, checkResult) {
 }
 
 async function sendDownAlert(monitor, checkResult) {
-  const recent = checkRecentNotification.get(monitor.id, 'down');
+  const recent = await db.prepare(`
+    SELECT COUNT(*) as count FROM notifications
+    WHERE monitor_id = ? AND type = ?
+    AND sent_at > datetime('now', '-15 minutes')
+  `).get(monitor.id, 'down');
   if (recent.count > 0) return;
 
   const subject = `[DOWN] Monitor Alert: ${monitor.name} (${monitor.url})`;
@@ -97,7 +87,9 @@ async function sendDownAlert(monitor, checkResult) {
       subject,
       text,
     });
-    logNotification.run(
+    await db.prepare(`
+      INSERT INTO notifications (monitor_id, type, email, details) VALUES (?, ?, ?, ?)
+    `).run(
       monitor.id,
       'down',
       monitor.notify_email,
@@ -110,7 +102,11 @@ async function sendDownAlert(monitor, checkResult) {
 }
 
 async function sendRecoveryAlert(monitor) {
-  const recent = checkRecentNotification.get(monitor.id, 'recovery');
+  const recent = await db.prepare(`
+    SELECT COUNT(*) as count FROM notifications
+    WHERE monitor_id = ? AND type = ?
+    AND sent_at > datetime('now', '-15 minutes')
+  `).get(monitor.id, 'recovery');
   if (recent.count > 0) return;
 
   let downtimeDuration = 'unknown';
@@ -141,7 +137,9 @@ async function sendRecoveryAlert(monitor) {
       subject,
       text,
     });
-    logNotification.run(
+    await db.prepare(`
+      INSERT INTO notifications (monitor_id, type, email, details) VALUES (?, ?, ?, ?)
+    `).run(
       monitor.id,
       'recovery',
       monitor.notify_email,

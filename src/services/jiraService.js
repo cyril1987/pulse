@@ -102,18 +102,7 @@ async function searchIssues(query, maxResults = 10) {
   }));
 }
 
-// ─── Prepared Statements for DB sync ────────────────────────────────────────
-
-const getJiraTasks = db.prepare(`
-  SELECT id, jira_key, jira_status FROM tasks WHERE jira_key IS NOT NULL
-`);
-
-const updateJiraFields = db.prepare(`
-  UPDATE tasks
-  SET jira_status = ?, jira_summary = ?, jira_assignee = ?, jira_due_date = ?,
-      jira_url = ?, jira_synced_at = datetime('now'), updated_at = datetime('now')
-  WHERE id = ?
-`);
+// ─── DB sync ────────────────────────────────────────────────────────────────
 
 /**
  * Sync all Jira-linked tasks with latest data from Jira API.
@@ -122,7 +111,9 @@ const updateJiraFields = db.prepare(`
 async function syncAllJiraTasks() {
   if (!isConfigured()) return;
 
-  const tasks = getJiraTasks.all();
+  const tasks = await db.prepare(`
+    SELECT id, jira_key, jira_status FROM tasks WHERE jira_key IS NOT NULL
+  `).all();
   if (tasks.length === 0) return;
 
   console.log(`[JIRA] Syncing ${tasks.length} linked task(s)`);
@@ -138,7 +129,12 @@ async function syncAllJiraTasks() {
           const issue = await fetchIssue(task.jira_key);
           const oldStatus = task.jira_status;
 
-          updateJiraFields.run(
+          await db.prepare(`
+            UPDATE tasks
+            SET jira_status = ?, jira_summary = ?, jira_assignee = ?, jira_due_date = ?,
+                jira_url = ?, jira_synced_at = datetime('now'), updated_at = datetime('now')
+            WHERE id = ?
+          `).run(
             issue.status,
             issue.summary,
             issue.assignee,

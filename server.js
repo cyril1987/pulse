@@ -1,12 +1,11 @@
 require('dotenv').config();
 const express = require('express');
 const path = require('path');
-const session = require('express-session');
-const SqliteStore = require('better-sqlite3-session-store')(session);
+const cookieSession = require('cookie-session');
 const config = require('./src/config');
 const db = require('./src/db');
+const { dbReady } = require('./src/db');
 const passport = require('./src/auth');
-const scheduler = require('./src/services/scheduler');
 const authRouter = require('./src/routes/auth');
 const healthRouter = require('./src/routes/health');
 const requireAuth = require('./src/middleware/requireAuth');
@@ -18,25 +17,42 @@ const tasksRouter = require('./src/routes/tasks');
 
 const app = express();
 
+// On Vercel, ensure DB migrations complete before handling any request
+if (process.env.VERCEL) {
+  app.use(async (req, res, next) => {
+    try {
+      await dbReady;
+      next();
+    } catch (err) {
+      console.error('DB init failed:', err);
+      res.status(503).json({ error: 'Database not ready' });
+    }
+  });
+}
+
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
-// Session management
-app.use(session({
-  store: new SqliteStore({
-    client: db,
-    expired: { clear: true, intervalMs: 900000 },
-  }),
+// Session management — cookie-session (no server-side store needed)
+app.use(cookieSession({
+  name: 'session',
   secret: config.session.secret,
-  resave: false,
-  saveUninitialized: false,
-  cookie: {
-    secure: process.env.NODE_ENV === 'production',
-    httpOnly: true,
-    maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
-    sameSite: 'lax',
-  },
+  maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+  secure: process.env.NODE_ENV === 'production',
+  httpOnly: true,
+  sameSite: 'lax',
 }));
+
+// cookie-session doesn't implement regenerate/save — shim them for Passport 0.6+
+app.use((req, res, next) => {
+  if (req.session && !req.session.regenerate) {
+    req.session.regenerate = (cb) => cb();
+  }
+  if (req.session && !req.session.save) {
+    req.session.save = (cb) => cb();
+  }
+  next();
+});
 
 // Passport initialization
 app.use(passport.initialize());
@@ -66,17 +82,30 @@ app.use((err, req, res, next) => {
   res.status(500).json({ error: 'Internal server error' });
 });
 
-const server = app.listen(config.port, '0.0.0.0', () => {
-  console.log(`iConcile Pulse running on http://0.0.0.0:${config.port}`);
-  scheduler.start();
-});
+// ─── Vercel vs Local ────────────────────────────────────────────────────────
 
-process.on('SIGTERM', () => {
-  scheduler.stop();
-  server.close();
-});
+if (process.env.VERCEL) {
+  // On Vercel: export the app for the serverless function wrapper.
+  // Don't start a server or scheduler — cron handlers take care of scheduling.
+  module.exports = app;
+} else {
+  // Local development: start the server and scheduler
+  dbReady.then(() => {
+    const scheduler = require('./src/services/scheduler');
 
-process.on('SIGINT', () => {
-  scheduler.stop();
-  server.close();
-});
+    const server = app.listen(config.port, '0.0.0.0', () => {
+      console.log(`iConcile Pulse running on http://0.0.0.0:${config.port}`);
+      scheduler.start();
+    });
+
+    process.on('SIGTERM', () => {
+      scheduler.stop();
+      server.close();
+    });
+
+    process.on('SIGINT', () => {
+      scheduler.stop();
+      server.close();
+    });
+  });
+}

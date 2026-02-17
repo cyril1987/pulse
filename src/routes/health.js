@@ -9,9 +9,9 @@ const startedAt = new Date().toISOString();
 
 // Public lightweight health check (for load balancers / uptime monitors)
 // Returns 200 if the server and database are reachable
-router.get('/health', (req, res) => {
+router.get('/health', async (req, res) => {
   try {
-    db.prepare('SELECT 1').get();
+    await db.prepare('SELECT 1').get();
     res.json({ status: 'ok', timestamp: new Date().toISOString() });
   } catch (err) {
     res.status(503).json({ status: 'error', error: 'Database unreachable' });
@@ -19,14 +19,14 @@ router.get('/health', (req, res) => {
 });
 
 // Authenticated detailed health check (full system status)
-router.get('/health/details', requireAuth, (req, res) => {
+router.get('/health/details', requireAuth, async (req, res) => {
   const checks = {};
   let overall = 'healthy';
 
   // Database check
   try {
     const dbStart = Date.now();
-    db.prepare('SELECT 1').get();
+    await db.prepare('SELECT 1').get();
     const dbLatencyMs = Date.now() - dbStart;
     checks.database = { status: 'ok', latencyMs: dbLatencyMs };
   } catch (err) {
@@ -36,11 +36,11 @@ router.get('/health/details', requireAuth, (req, res) => {
 
   // Monitor stats
   try {
-    const totalMonitors = db.prepare('SELECT COUNT(*) as count FROM monitors').get().count;
-    const activeMonitors = db.prepare('SELECT COUNT(*) as count FROM monitors WHERE is_active = 1').get().count;
+    const totalMonitors = (await db.prepare('SELECT COUNT(*) as count FROM monitors').get()).count;
+    const activeMonitors = (await db.prepare('SELECT COUNT(*) as count FROM monitors WHERE is_active = 1').get()).count;
     const pausedMonitors = totalMonitors - activeMonitors;
 
-    const statusCounts = db.prepare(`
+    const statusCounts = await db.prepare(`
       SELECT current_status, COUNT(*) as count FROM monitors GROUP BY current_status
     `).all();
 
@@ -63,14 +63,14 @@ router.get('/health/details', requireAuth, (req, res) => {
 
   // Recent check activity
   try {
-    const last5Min = db.prepare(`
+    const last5Min = await db.prepare(`
       SELECT COUNT(*) as total,
         SUM(CASE WHEN is_success = 1 THEN 1 ELSE 0 END) as successful,
         ROUND(AVG(response_time_ms), 0) as avgResponseMs
       FROM checks WHERE checked_at > datetime('now', '-5 minutes')
     `).get();
 
-    const last1Hour = db.prepare(`
+    const last1Hour = await db.prepare(`
       SELECT COUNT(*) as total,
         SUM(CASE WHEN is_success = 1 THEN 1 ELSE 0 END) as successful
       FROM checks WHERE checked_at > datetime('now', '-1 hour')
@@ -104,17 +104,24 @@ router.get('/health/details', requireAuth, (req, res) => {
   }
 
   // Scheduler status
-  const schedulerStatus = scheduler.getStatus();
-  checks.scheduler = {
-    status: schedulerStatus.running ? 'ok' : 'error',
-    running: schedulerStatus.running,
-    intervalMs: schedulerStatus.intervalMs,
-    lastTickAt: schedulerStatus.lastTickAt,
-    lastTickDurationMs: schedulerStatus.lastTickDurationMs,
-    lastTickError: schedulerStatus.lastTickError,
-  };
-  if (!schedulerStatus.running) overall = 'unhealthy';
-  if (schedulerStatus.lastTickError) overall = 'degraded';
+  if (process.env.VERCEL) {
+    checks.scheduler = {
+      status: 'ok',
+      note: 'On Vercel, scheduling is handled by cron jobs',
+    };
+  } else {
+    const schedulerStatus = scheduler.getStatus();
+    checks.scheduler = {
+      status: schedulerStatus.running ? 'ok' : 'error',
+      running: schedulerStatus.running,
+      intervalMs: schedulerStatus.intervalMs,
+      lastTickAt: schedulerStatus.lastTickAt,
+      lastTickDurationMs: schedulerStatus.lastTickDurationMs,
+      lastTickError: schedulerStatus.lastTickError,
+    };
+    if (!schedulerStatus.running) overall = 'unhealthy';
+    if (schedulerStatus.lastTickError) overall = 'degraded';
+  }
 
   // SMTP configuration
   const smtpConfigured = !!(config.smtp.host && config.smtp.user);

@@ -3,7 +3,7 @@ const router = express.Router();
 const db = require('../db');
 const { validateMonitorData } = require('../middleware/validate');
 
-router.post('/monitors/bulk', express.json({ limit: '1mb' }), (req, res) => {
+router.post('/monitors/bulk', express.json({ limit: '1mb' }), async (req, res) => {
   const { monitors } = req.body;
 
   if (!Array.isArray(monitors)) {
@@ -21,10 +21,10 @@ router.post('/monitors/bulk', express.json({ limit: '1mb' }), (req, res) => {
 
   // Collect existing URLs and names for duplicate checking
   const existingUrls = new Set(
-    db.prepare('SELECT url FROM monitors').all().map(r => r.url)
+    (await db.prepare('SELECT url FROM monitors').all()).map(r => r.url)
   );
   const existingNames = new Set(
-    db.prepare('SELECT name FROM monitors').all().map(r => r.name)
+    (await db.prepare('SELECT name FROM monitors').all()).map(r => r.name)
   );
   // Track URLs and names within the current batch too
   const batchUrls = new Set();
@@ -63,20 +63,18 @@ router.post('/monitors/bulk', express.json({ limit: '1mb' }), (req, res) => {
   }
 
   if (validMonitors.length > 0) {
-    const insertStmt = db.prepare(`
-      INSERT INTO monitors (url, name, frequency_seconds, expected_status, timeout_ms, notify_email, custom_headers, group_name)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    `);
-
-    const insertAll = db.transaction((items) => {
-      for (const item of items) {
+    await db.transaction(async (tx) => {
+      for (const item of validMonitors) {
         const d = item.data;
         const headersJson = Array.isArray(d.customHeaders) && d.customHeaders.length > 0
           ? JSON.stringify(d.customHeaders)
           : null;
         const groupName = d.group && typeof d.group === 'string' && d.group.trim() ? d.group.trim() : null;
         try {
-          const result = insertStmt.run(
+          const result = await tx.prepare(`
+            INSERT INTO monitors (url, name, frequency_seconds, expected_status, timeout_ms, notify_email, custom_headers, group_name)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+          `).run(
             d.url,
             d.name || new URL(d.url).hostname,
             d.frequency || 300,
@@ -86,15 +84,13 @@ router.post('/monitors/bulk', express.json({ limit: '1mb' }), (req, res) => {
             headersJson,
             groupName
           );
-          const monitor = db.prepare('SELECT * FROM monitors WHERE id = ?').get(result.lastInsertRowid);
+          const monitor = await tx.prepare('SELECT * FROM monitors WHERE id = ?').get(result.lastInsertRowid);
           results.created.push({ rowIndex: item.index, monitorId: monitor.id, name: monitor.name });
         } catch (err) {
           results.failed.push({ rowIndex: item.index, errors: [err.message] });
         }
       }
     });
-
-    insertAll(validMonitors);
   }
 
   res.json({
@@ -109,7 +105,7 @@ router.post('/monitors/bulk', express.json({ limit: '1mb' }), (req, res) => {
 
 // ─── iSmart Ticket Bulk Upload ──────────────────────────────────────────────
 
-router.post('/tasks/ismart-upload', express.json({ limit: '5mb' }), (req, res) => {
+router.post('/tasks/ismart-upload', express.json({ limit: '5mb' }), async (req, res) => {
   const { tickets } = req.body;
 
   if (!Array.isArray(tickets)) {
@@ -125,56 +121,8 @@ router.post('/tasks/ismart-upload', express.json({ limit: '5mb' }), (req, res) =
   const results = { created: [], updated: [], failed: [] };
 
   // Find iSmart Ticket category
-  const ismartCategory = db.prepare("SELECT id FROM task_categories WHERE name = 'iSmart Ticket'").get();
+  const ismartCategory = await db.prepare("SELECT id FROM task_categories WHERE name = 'iSmart Ticket'").get();
   const categoryId = ismartCategory ? ismartCategory.id : null;
-
-  const upsertTicket = db.prepare(`
-    INSERT INTO ismart_tickets (
-      reference_id, incident_id, priority, short_description, description,
-      state, internal_state, category, subcategory, subcategory2,
-      opened_at, updated_at, due_date, opened_by, assigned_to,
-      group_name, business_service, impact, urgency, hold_reason,
-      has_breached, location, channel, program_name, task_id, imported_by
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    ON CONFLICT(reference_id) DO UPDATE SET
-      incident_id = excluded.incident_id,
-      priority = excluded.priority,
-      short_description = excluded.short_description,
-      description = excluded.description,
-      state = excluded.state,
-      internal_state = excluded.internal_state,
-      category = excluded.category,
-      subcategory = excluded.subcategory,
-      subcategory2 = excluded.subcategory2,
-      opened_at = excluded.opened_at,
-      updated_at = excluded.updated_at,
-      due_date = excluded.due_date,
-      opened_by = excluded.opened_by,
-      assigned_to = excluded.assigned_to,
-      group_name = excluded.group_name,
-      business_service = excluded.business_service,
-      impact = excluded.impact,
-      urgency = excluded.urgency,
-      hold_reason = excluded.hold_reason,
-      has_breached = excluded.has_breached,
-      location = excluded.location,
-      channel = excluded.channel,
-      program_name = excluded.program_name,
-      imported_by = excluded.imported_by
-  `);
-
-  const insertTask = db.prepare(`
-    INSERT INTO tasks (title, description, source, source_ref, priority, status, due_date, category_id, created_by)
-    VALUES (?, ?, 'ismart', ?, ?, 'todo', ?, ?, ?)
-  `);
-
-  const updateTaskSourceRef = db.prepare(`
-    UPDATE tasks SET title = ?, description = ?, priority = ?, due_date = ?, updated_at = datetime('now')
-    WHERE id = ?
-  `);
-
-  const findExistingTicket = db.prepare('SELECT id, task_id FROM ismart_tickets WHERE reference_id = ?');
-  const linkTicketToTask = db.prepare('UPDATE ismart_tickets SET task_id = ? WHERE id = ?');
 
   const mapPriority = (p) => {
     if (!p) return 'medium';
@@ -185,9 +133,9 @@ router.post('/tasks/ismart-upload', express.json({ limit: '5mb' }), (req, res) =
     return 'low';
   };
 
-  const importAll = db.transaction((items) => {
-    for (let i = 0; i < items.length; i++) {
-      const t = items[i];
+  await db.transaction(async (tx) => {
+    for (let i = 0; i < tickets.length; i++) {
+      const t = tickets[i];
 
       // Validate: must have reference_id and short_description
       if (!t.referenceId || !t.referenceId.trim()) {
@@ -206,10 +154,43 @@ router.post('/tasks/ismart-upload', express.json({ limit: '5mb' }), (req, res) =
       const dueDate = t.dueDate || null;
 
       try {
-        const existing = findExistingTicket.get(refId);
+        const existing = await tx.prepare('SELECT id, task_id FROM ismart_tickets WHERE reference_id = ?').get(refId);
 
         // Upsert iSmart ticket
-        upsertTicket.run(
+        await tx.prepare(`
+          INSERT INTO ismart_tickets (
+            reference_id, incident_id, priority, short_description, description,
+            state, internal_state, category, subcategory, subcategory2,
+            opened_at, updated_at, due_date, opened_by, assigned_to,
+            group_name, business_service, impact, urgency, hold_reason,
+            has_breached, location, channel, program_name, task_id, imported_by
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          ON CONFLICT(reference_id) DO UPDATE SET
+            incident_id = excluded.incident_id,
+            priority = excluded.priority,
+            short_description = excluded.short_description,
+            description = excluded.description,
+            state = excluded.state,
+            internal_state = excluded.internal_state,
+            category = excluded.category,
+            subcategory = excluded.subcategory,
+            subcategory2 = excluded.subcategory2,
+            opened_at = excluded.opened_at,
+            updated_at = excluded.updated_at,
+            due_date = excluded.due_date,
+            opened_by = excluded.opened_by,
+            assigned_to = excluded.assigned_to,
+            group_name = excluded.group_name,
+            business_service = excluded.business_service,
+            impact = excluded.impact,
+            urgency = excluded.urgency,
+            hold_reason = excluded.hold_reason,
+            has_breached = excluded.has_breached,
+            location = excluded.location,
+            channel = excluded.channel,
+            program_name = excluded.program_name,
+            imported_by = excluded.imported_by
+        `).run(
           refId, t.incidentId || null, t.priority || null, t.shortDescription || null,
           t.description || null, t.state || null, t.internalState || null,
           t.category || null, t.subcategory || null, t.subcategory2 || null,
@@ -223,17 +204,23 @@ router.post('/tasks/ismart-upload', express.json({ limit: '5mb' }), (req, res) =
 
         if (existing && existing.task_id) {
           // Update existing task (title, description, priority, due date)
-          updateTaskSourceRef.run(title, desc, priority, dueDate, existing.task_id);
+          await tx.prepare(`
+            UPDATE tasks SET title = ?, description = ?, priority = ?, due_date = ?, updated_at = datetime('now')
+            WHERE id = ?
+          `).run(title, desc, priority, dueDate, existing.task_id);
           results.updated.push({ rowIndex: i, referenceId: refId, taskId: existing.task_id, title });
         } else {
           // Create new task (unassigned)
-          const taskResult = insertTask.run(title, desc, refId, priority, dueDate, categoryId, req.user.id);
+          const taskResult = await tx.prepare(`
+            INSERT INTO tasks (title, description, source, source_ref, priority, status, due_date, category_id, created_by)
+            VALUES (?, ?, 'ismart', ?, ?, 'todo', ?, ?, ?)
+          `).run(title, desc, refId, priority, dueDate, categoryId, req.user.id);
           const taskId = taskResult.lastInsertRowid;
 
           // Link the iSmart ticket to the new task
-          const ticketRow = db.prepare('SELECT id FROM ismart_tickets WHERE reference_id = ?').get(refId);
+          const ticketRow = await tx.prepare('SELECT id FROM ismart_tickets WHERE reference_id = ?').get(refId);
           if (ticketRow) {
-            linkTicketToTask.run(taskId, ticketRow.id);
+            await tx.prepare('UPDATE ismart_tickets SET task_id = ? WHERE id = ?').run(taskId, ticketRow.id);
           }
 
           results.created.push({ rowIndex: i, referenceId: refId, taskId: Number(taskId), title });
@@ -243,8 +230,6 @@ router.post('/tasks/ismart-upload', express.json({ limit: '5mb' }), (req, res) =
       }
     }
   });
-
-  importAll(tickets);
 
   res.json({
     ...results,
@@ -259,8 +244,8 @@ router.post('/tasks/ismart-upload', express.json({ limit: '5mb' }), (req, res) =
 
 // ─── Get iSmart ticket for a task ──────────────────────────────────────────
 
-router.get('/tasks/:id/ismart', (req, res) => {
-  const ticket = db.prepare(`
+router.get('/tasks/:id/ismart', async (req, res) => {
+  const ticket = await db.prepare(`
     SELECT * FROM ismart_tickets WHERE task_id = ?
   `).get(req.params.id);
 
@@ -273,7 +258,7 @@ router.get('/tasks/:id/ismart', (req, res) => {
 
 // ─── List all iSmart tickets ────────────────────────────────────────────────
 
-router.get('/tasks/ismart-tickets', (req, res) => {
+router.get('/tasks/ismart-tickets', async (req, res) => {
   const { state, search, limit: lim, offset: off } = req.query;
   const conditions = [];
   const params = [];
@@ -288,7 +273,7 @@ router.get('/tasks/ismart-tickets', (req, res) => {
   const limit = Math.min(parseInt(lim || '50', 10), 200);
   const offset = parseInt(off || '0', 10);
 
-  const tickets = db.prepare(`
+  const tickets = await db.prepare(`
     SELECT it.*, t.status AS task_status, t.assigned_to AS task_assigned_to,
       u.name AS task_assigned_to_name
     FROM ismart_tickets it
@@ -298,7 +283,7 @@ router.get('/tasks/ismart-tickets', (req, res) => {
     LIMIT ? OFFSET ?
   `).all(...params, limit, offset);
 
-  const total = db.prepare(`SELECT COUNT(*) AS count FROM ismart_tickets it ${where}`).get(...params);
+  const total = await db.prepare(`SELECT COUNT(*) AS count FROM ismart_tickets it ${where}`).get(...params);
 
   res.json({ tickets, total: total.count });
 });
