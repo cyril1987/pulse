@@ -2282,33 +2282,6 @@ select.staging-cell-input {
   padding-left: 1.6rem;
 }
 
-/* ─── Generic Monitor Cards ─────────────────────────────────────────────── */
-
-.monitor-card.status-degraded {
-  border-color: rgba(245, 158, 11, 0.15);
-}
-.monitor-card.status-degraded:hover {
-  border-color: rgba(245, 158, 11, 0.25);
-  box-shadow: 0 0 20px rgba(245, 158, 11, 0.08);
-}
-
-.card-env-info {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.35rem;
-  margin-top: 0.35rem;
-}
-
-.env-tag {
-  display: inline-block;
-  font-size: 0.7rem;
-  padding: 0.15rem 0.5rem;
-  border-radius: 999px;
-  background: rgba(42, 157, 143, 0.1);
-  color: var(--color-primary);
-  border: 1px solid rgba(42, 157, 143, 0.15);
-}
-
 /* ═══════════════════════════════════════════════════════════════════════════
    Data Checks Dashboard (dc-*)
    ═══════════════════════════════════════════════════════════════════════════ */
