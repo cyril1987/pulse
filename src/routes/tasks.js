@@ -617,7 +617,7 @@ router.put('/:id', validateTask, async (req, res) => {
       parentTaskId ? parseInt(parentTaskId, 10) : null,
       recurrencePattern ? JSON.stringify(recurrencePattern) : existing.recurrence_pattern,
       recurrenceNextAt,
-      recurrenceEndAt || existing.recurrence_end_at,
+      recurrenceEndAt !== undefined ? (recurrenceEndAt || null) : existing.recurrence_end_at,
       isPrivate !== undefined ? (isPrivate ? 1 : 0) : existing.is_private,
       req.params.id
     );

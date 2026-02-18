@@ -191,19 +191,20 @@ router.get('/:id', async (req, res) => {
         GROUP BY status
       `).all(monitor.id, interval);
 
-      let total = 0, passCount = 0, failCount = 0, errorCount = 0, avgExec = null;
+      let total = 0, passCount = 0, failCount = 0, errorCount = 0, totalExec = 0, execCount = 0;
       for (const r of rows) {
         total += r.cnt;
-        if (r.status === 'pass') { passCount = r.cnt; avgExec = r.avg_exec; }
+        if (r.status === 'pass') passCount = r.cnt;
         if (r.status === 'fail') failCount = r.cnt;
         if (r.status === 'error') errorCount = r.cnt;
+        if (r.avg_exec) { totalExec += r.avg_exec * r.cnt; execCount += r.cnt; }
       }
 
       stats[label] = {
         totalChecks: total,
         passCount, failCount, errorCount,
         passRate: total > 0 ? (passCount / total * 100).toFixed(1) : null,
-        avgExecutionTimeMs: avgExec ? Math.round(avgExec) : null,
+        avgExecutionTimeMs: execCount > 0 ? Math.round(totalExec / execCount) : null,
       };
     }
 
