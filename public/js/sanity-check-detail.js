@@ -1,6 +1,6 @@
 const SanityCheckDetail = {
   async render(app, id) {
-    app.innerHTML = '<div class="loading">Loading sanity check...</div>';
+    app.innerHTML = '<div class="loading">Loading check details...</div>';
 
     try {
       const [monitor, results] = await Promise.all([
@@ -15,108 +15,191 @@ const SanityCheckDetail = {
   },
 
   renderContent(app, monitor, resultsData) {
-    const statusClass = monitor.currentStatus === 'pass' ? 'up' : monitor.currentStatus === 'fail' ? 'down' : 'unknown';
+    const status = monitor.currentStatus || 'unknown';
+    const isFail = status === 'fail';
+    const isError = status === 'error' || status === 'unknown';
+    const isPass = status === 'pass';
     const results = resultsData.results || [];
+    const value = monitor.lastValue;
+    const hasValue = value !== null && value !== undefined;
+
+    const stats = monitor.stats || {};
+    const s24h = stats['24h'] || {};
+    const s7d = stats['7d'] || {};
 
     app.innerHTML = `
-      <div class="detail-header">
-        <a href="#/sanity-checks" class="btn btn-back">&larr; Back</a>
-        <div class="detail-title">
-          <span class="status-dot status-${statusClass}"></span>
-          <h1>${escapeHtml(monitor.name)}</h1>
+      <div class="dcd-layout">
+        <!-- Header -->
+        <div class="dcd-header">
+          <a href="#/sanity-checks" class="btn-back">&larr;</a>
+          <div class="dcd-header-info">
+            <div class="dcd-header-top">
+              <span class="dc-status-indicator dc-status-${isFail ? 'fail' : isError ? 'error' : 'pass'}"></span>
+              <h1>${escapeHtml(monitor.name)}</h1>
+            </div>
+            <div class="dcd-header-meta">
+              <span class="dc-row-code">${escapeHtml(monitor.code)}</span>
+              ${monitor.groupName ? `<span class="dc-row-group">${escapeHtml(monitor.groupName)}</span>` : ''}
+              <span class="dc-severity dc-severity-${monitor.severity}">${monitor.severity}</span>
+              <span class="dcd-client-url">${escapeHtml(monitor.clientUrl)}</span>
+            </div>
+          </div>
+          <div class="dcd-header-actions">
+            <button id="btn-run-now" class="btn btn-primary btn-sm">Run Now</button>
+            <a href="#/sanity-checks/${monitor.id}/edit" class="btn btn-secondary btn-sm">Edit</a>
+            ${monitor.isActive
+              ? `<button id="btn-pause" class="btn btn-secondary btn-sm">Pause</button>`
+              : `<button id="btn-resume" class="btn btn-primary btn-sm">Resume</button>`}
+            <button id="btn-delete" class="btn btn-danger btn-sm">Delete</button>
+          </div>
         </div>
-        <div class="detail-subtitle">
-          <span class="badge">${escapeHtml(monitor.code)}</span>
-          <span class="monitor-url-badge">${escapeHtml(monitor.clientUrl)}</span>
-        </div>
-      </div>
 
-      <div class="detail-actions">
-        <button id="btn-run-now" class="btn btn-primary">Run Now</button>
-        <a href="#/sanity-checks/edit/${monitor.id}" class="btn">Edit</a>
-        ${monitor.isActive
-          ? `<button id="btn-pause" class="btn btn-warning">Pause</button>`
-          : `<button id="btn-resume" class="btn btn-success">Resume</button>`}
-        <button id="btn-delete" class="btn btn-danger">Delete</button>
-      </div>
+        <!-- Current value hero -->
+        <div class="dcd-hero ${isFail ? 'dcd-hero-fail' : isError ? 'dcd-hero-error' : 'dcd-hero-pass'}">
+          <div class="dcd-hero-value-wrap">
+            <div class="dcd-hero-value">${hasValue ? this.formatNumber(value) : '&mdash;'}</div>
+            <div class="dcd-hero-label">
+              ${isFail ? 'Exceptions found — needs action' : isPass ? 'Check passing' : 'Check error'}
+            </div>
+          </div>
+          ${monitor.lastCheckedAt ? `
+            <div class="dcd-hero-time">
+              Last checked ${this.timeAgo(new Date(monitor.lastCheckedAt))}
+              <span class="dcd-hero-timestamp">${new Date(monitor.lastCheckedAt).toLocaleString()}</span>
+            </div>
+          ` : '<div class="dcd-hero-time">Never checked</div>'}
+        </div>
 
-      <div class="stats-grid">
-        <div class="stat-card">
-          <div class="stat-value status-text-${statusClass}">${monitor.currentStatus || 'unknown'}</div>
-          <div class="stat-label">Status</div>
+        <!-- Stats row -->
+        <div class="dcd-stats-row">
+          <div class="dcd-stat">
+            <div class="dcd-stat-value">${s24h.totalChecks || 0}</div>
+            <div class="dcd-stat-label">Checks (24h)</div>
+          </div>
+          <div class="dcd-stat">
+            <div class="dcd-stat-value ${s24h.passRate && parseFloat(s24h.passRate) < 100 ? 'dc-value-bad' : ''}">${s24h.passRate ? s24h.passRate + '%' : '—'}</div>
+            <div class="dcd-stat-label">Pass Rate (24h)</div>
+          </div>
+          <div class="dcd-stat">
+            <div class="dcd-stat-value">${s24h.failCount || 0}</div>
+            <div class="dcd-stat-label">Failures (24h)</div>
+          </div>
+          <div class="dcd-stat">
+            <div class="dcd-stat-value">${s24h.avgExecutionTimeMs ? s24h.avgExecutionTimeMs + 'ms' : '—'}</div>
+            <div class="dcd-stat-label">Avg Exec Time</div>
+          </div>
+          <div class="dcd-stat">
+            <div class="dcd-stat-value">${s7d.passRate ? s7d.passRate + '%' : '—'}</div>
+            <div class="dcd-stat-label">Pass Rate (7d)</div>
+          </div>
+          <div class="dcd-stat">
+            <div class="dcd-stat-value">${monitor.valueChanges || 0}</div>
+            <div class="dcd-stat-label">Value Changes</div>
+          </div>
         </div>
-        <div class="stat-card">
-          <div class="stat-value">${monitor.lastValue !== null && monitor.lastValue !== undefined ? monitor.lastValue : '—'}</div>
-          <div class="stat-label">Current Value</div>
-        </div>
-        <div class="stat-card">
-          <div class="stat-value">${monitor.stats && monitor.stats['24h'] ? monitor.stats['24h'].passRate + '%' : '—'}</div>
-          <div class="stat-label">Pass Rate (24h)</div>
-        </div>
-        <div class="stat-card">
-          <div class="stat-value">${monitor.stats && monitor.stats['24h'] ? (monitor.stats['24h'].avgExecutionTimeMs || '—') + 'ms' : '—'}</div>
-          <div class="stat-label">Avg Exec Time (24h)</div>
-        </div>
-        <div class="stat-card">
-          <div class="stat-value">${monitor.stats && monitor.stats['24h'] ? monitor.stats['24h'].totalChecks : 0}</div>
-          <div class="stat-label">Total Checks (24h)</div>
-        </div>
-        <div class="stat-card">
-          <div class="stat-value">${monitor.valueChanges || 0}</div>
-          <div class="stat-label">Value Changes</div>
-        </div>
-      </div>
 
-      <div class="detail-section">
-        <h2>Configuration</h2>
-        <div class="config-grid">
-          <div><strong>Check Type:</strong> ${escapeHtml(monitor.checkType)}</div>
-          <div><strong>Expected Min:</strong> ${monitor.expectedMin !== null && monitor.expectedMin !== undefined ? monitor.expectedMin : '—'}</div>
-          <div><strong>Expected Max:</strong> ${monitor.expectedMax !== null && monitor.expectedMax !== undefined ? monitor.expectedMax : '—'}</div>
-          <div><strong>Severity:</strong> <span class="badge">${escapeHtml(monitor.severity)}</span></div>
-          <div><strong>Frequency:</strong> ${monitor.frequencySeconds}s</div>
-          <div><strong>Notify:</strong> ${monitor.notifyEmail || '—'}</div>
+        <!-- Config -->
+        <div class="dcd-section">
+          <div class="dcd-section-header">Configuration</div>
+          <div class="dcd-config-grid">
+            <div class="dcd-config-item">
+              <span class="dcd-config-label">Check Type</span>
+              <span class="dcd-config-value">${escapeHtml(monitor.checkType)}</span>
+            </div>
+            <div class="dcd-config-item">
+              <span class="dcd-config-label">Expected Min</span>
+              <span class="dcd-config-value">${monitor.expectedMin !== null && monitor.expectedMin !== undefined ? monitor.expectedMin : '—'}</span>
+            </div>
+            <div class="dcd-config-item">
+              <span class="dcd-config-label">Expected Max</span>
+              <span class="dcd-config-value">${monitor.expectedMax !== null && monitor.expectedMax !== undefined ? monitor.expectedMax : '—'}</span>
+            </div>
+            <div class="dcd-config-item">
+              <span class="dcd-config-label">Frequency</span>
+              <span class="dcd-config-value">${this.formatFrequency(monitor.frequencySeconds)}</span>
+            </div>
+            <div class="dcd-config-item">
+              <span class="dcd-config-label">Notify</span>
+              <span class="dcd-config-value">${monitor.notifyEmail || '—'}</span>
+            </div>
+            <div class="dcd-config-item">
+              <span class="dcd-config-label">Active</span>
+              <span class="dcd-config-value">${monitor.isActive ? 'Yes' : 'Paused'}</span>
+            </div>
+          </div>
         </div>
-      </div>
 
-      <div class="detail-section">
-        <h2>Recent Results</h2>
-        ${results.length > 0 ? `
-          <table class="data-table">
-            <thead>
-              <tr>
-                <th>Status</th>
-                <th>Value</th>
-                <th>Previous</th>
-                <th>Changed</th>
-                <th>Exec Time</th>
-                <th>Error</th>
-                <th>Timestamp</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${results.map(r => `
-                <tr class="${r.valueChanged ? 'row-highlight' : ''}">
-                  <td><span class="badge badge-${r.status === 'pass' ? 'up' : r.status === 'fail' ? 'down' : 'unknown'}">${r.status}</span></td>
-                  <td>${r.actualValue !== null && r.actualValue !== undefined ? r.actualValue : '—'}</td>
-                  <td>${r.previousValue !== null && r.previousValue !== undefined ? r.previousValue : '—'}</td>
-                  <td>${r.valueChanged ? '<span class="badge badge-warning">Yes</span>' : 'No'}</td>
-                  <td>${r.executionTimeMs}ms</td>
-                  <td class="error-cell">${r.errorMessage ? escapeHtml(r.errorMessage).substring(0, 80) : '—'}</td>
-                  <td>${new Date(r.checkedAt).toLocaleString()}</td>
-                </tr>
-              `).join('')}
-            </tbody>
-          </table>
-        ` : '<p>No results yet.</p>'}
+        <!-- Result history -->
+        <div class="dcd-section">
+          <div class="dcd-section-header">Execution History <span class="dcd-section-count">${resultsData.total || results.length} total</span></div>
+          ${results.length > 0 ? `
+            <div class="dcd-results-table-wrap">
+              <table class="dcd-results-table">
+                <thead>
+                  <tr>
+                    <th>Status</th>
+                    <th>Value</th>
+                    <th>Prev</th>
+                    <th>Changed</th>
+                    <th>Exec Time</th>
+                    <th>Error</th>
+                    <th>Timestamp</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${results.map(r => this.renderResultRow(r)).join('')}
+                </tbody>
+              </table>
+            </div>
+          ` : '<div class="dcd-no-results">No results yet. Click "Run Now" to execute the first check.</div>'}
+        </div>
       </div>
     `;
 
-    // Bind action buttons
+    // Bind actions
     document.getElementById('btn-run-now')?.addEventListener('click', () => this.runNow(monitor.id, app));
     document.getElementById('btn-pause')?.addEventListener('click', () => this.toggleActive(monitor.id, 'pause', app));
     document.getElementById('btn-resume')?.addEventListener('click', () => this.toggleActive(monitor.id, 'resume', app));
     document.getElementById('btn-delete')?.addEventListener('click', () => this.remove(monitor.id));
+  },
+
+  renderResultRow(r) {
+    const isFail = r.status === 'fail';
+    const isError = r.status === 'error';
+    return `
+      <tr class="${r.valueChanged ? 'dcd-row-changed' : ''} ${isFail ? 'dcd-row-fail' : ''}">
+        <td><span class="dc-badge dc-badge-${r.status === 'pass' ? 'pass' : r.status === 'fail' ? 'fail' : 'error'}">${r.status}</span></td>
+        <td class="dcd-val-cell ${isFail ? 'dc-value-bad' : ''}">${r.actualValue !== null && r.actualValue !== undefined ? this.formatNumber(r.actualValue) : '—'}</td>
+        <td>${r.previousValue !== null && r.previousValue !== undefined ? this.formatNumber(r.previousValue) : '—'}</td>
+        <td>${r.valueChanged ? '<span class="dc-badge dc-badge-changed">changed</span>' : '—'}</td>
+        <td>${r.executionTimeMs}ms</td>
+        <td class="dcd-error-cell">${r.errorMessage ? escapeHtml(r.errorMessage).substring(0, 100) : '—'}</td>
+        <td class="dcd-time-cell">${new Date(r.checkedAt).toLocaleString()}</td>
+      </tr>
+    `;
+  },
+
+  formatNumber(val) {
+    const num = parseFloat(val);
+    if (isNaN(num)) return val;
+    if (num >= 1000000) return (num / 1000000).toFixed(1) + 'M';
+    if (num >= 1000) return (num / 1000).toFixed(1) + 'K';
+    return num.toLocaleString();
+  },
+
+  formatFrequency(seconds) {
+    if (!seconds) return '—';
+    if (seconds < 60) return seconds + 's';
+    if (seconds < 3600) return Math.floor(seconds / 60) + ' min';
+    return Math.floor(seconds / 3600) + 'h';
+  },
+
+  timeAgo(date) {
+    const seconds = Math.floor((new Date() - date) / 1000);
+    if (seconds < 60) return 'just now';
+    if (seconds < 3600) return Math.floor(seconds / 60) + 'm ago';
+    if (seconds < 86400) return Math.floor(seconds / 3600) + 'h ago';
+    return Math.floor(seconds / 86400) + 'd ago';
   },
 
   async runNow(id, app) {
@@ -138,7 +221,8 @@ const SanityCheckDetail = {
   },
 
   async remove(id) {
-    if (!confirm('Are you sure you want to delete this monitor? All results will be lost.')) return;
+    const confirmed = await Modal.confirm('Are you sure you want to delete this check? All results will be lost.');
+    if (!confirmed) return;
     try {
       await API.delete(`/sanity-checks/${id}`);
       location.hash = '#/sanity-checks';
