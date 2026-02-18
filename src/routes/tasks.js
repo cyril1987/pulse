@@ -38,6 +38,7 @@ function formatTask(row) {
     jiraAssignee: row.jira_assignee || null,
     jiraDueDate: row.jira_due_date || null,
     jiraUrl: row.jira_url || null,
+    jiraSprint: row.jira_sprint ? (() => { try { return JSON.parse(row.jira_sprint); } catch { return null; } })() : null,
     jiraSyncedAt: row.jira_synced_at || null,
     isPrivate: row.is_private === 1,
     createdAt: row.created_at,
@@ -699,12 +700,12 @@ router.post('/:id/link-jira', async (req, res) => {
     await db.prepare(`
       UPDATE tasks SET
         jira_key = ?, jira_status = ?, jira_summary = ?, jira_assignee = ?,
-        jira_due_date = ?, jira_url = ?, jira_synced_at = datetime('now'),
+        jira_due_date = ?, jira_url = ?, jira_sprint = ?, jira_synced_at = datetime('now'),
         updated_at = datetime('now')
       WHERE id = ?
     `).run(
       issue.key, issue.status, issue.summary, issue.assignee,
-      issue.dueDate, issue.url, req.params.id
+      issue.dueDate, issue.url, issue.sprint, req.params.id
     );
 
     await addSystemComment(
@@ -794,12 +795,12 @@ router.post('/:id/sync-jira', async (req, res) => {
     await db.prepare(`
       UPDATE tasks SET
         jira_status = ?, jira_summary = ?, jira_assignee = ?,
-        jira_due_date = ?, jira_url = ?, jira_synced_at = datetime('now'),
+        jira_due_date = ?, jira_url = ?, jira_sprint = ?, jira_synced_at = datetime('now'),
         updated_at = datetime('now')
       WHERE id = ?
     `).run(
       issue.status, issue.summary, issue.assignee,
-      issue.dueDate, issue.url, req.params.id
+      issue.dueDate, issue.url, issue.sprint, req.params.id
     );
 
     if (oldStatus && oldStatus !== issue.status) {

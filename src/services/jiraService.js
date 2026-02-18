@@ -1,6 +1,44 @@
 const config = require('../config');
 const db = require('../db');
 
+// Sprint field ID — Jira Cloud uses customfield_10020 by default for sprints.
+// Override via JIRA_SPRINT_FIELD env var if your instance uses a different field.
+const SPRINT_FIELD = process.env.JIRA_SPRINT_FIELD || 'customfield_10020';
+
+/**
+ * Extract sprint info from Jira's sprint field value.
+ * The sprint field is an array of sprint objects with { name, state, ... }.
+ * States: "active" (current), "future" (upcoming), "closed" (past).
+ *
+ * Returns JSON string: { "label": "Current Sprint", "name": "Sprint 42" }
+ * or null if not in any sprint.
+ */
+function extractSprintInfo(sprintField) {
+  if (!sprintField || !Array.isArray(sprintField) || sprintField.length === 0) {
+    return null;
+  }
+
+  // Priority: active > future > closed (most recent)
+  const active = sprintField.find(s => s.state === 'active');
+  if (active) {
+    return JSON.stringify({ label: 'Current Sprint', name: active.name || 'Current Sprint' });
+  }
+
+  const future = sprintField.find(s => s.state === 'future');
+  if (future) {
+    return JSON.stringify({ label: 'Next Sprint', name: future.name || 'Next Sprint' });
+  }
+
+  // Only closed sprints remain — pick the most recent one (last in array)
+  const closed = sprintField.filter(s => s.state === 'closed');
+  if (closed.length > 0) {
+    const latest = closed[closed.length - 1];
+    return JSON.stringify({ label: 'Past Sprint', name: latest.name || 'Past Sprint' });
+  }
+
+  return null;
+}
+
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
 function isConfigured() {
@@ -58,7 +96,7 @@ async function testConnection() {
  */
 async function fetchIssue(issueKey) {
   const data = await jiraFetch(
-    `/rest/api/3/issue/${encodeURIComponent(issueKey)}?fields=status,summary,issuetype,priority,assignee,duedate`
+    `/rest/api/3/issue/${encodeURIComponent(issueKey)}?fields=status,summary,issuetype,priority,assignee,duedate,${SPRINT_FIELD}`
   );
 
   const fields = data.fields || {};
@@ -72,6 +110,7 @@ async function fetchIssue(issueKey) {
     assignee: fields.assignee?.displayName || null,
     assigneeAvatar: fields.assignee?.avatarUrls?.['24x24'] || null,
     dueDate: fields.duedate || null,
+    sprint: extractSprintInfo(fields[SPRINT_FIELD]),
     url: `${config.jira.baseUrl}/browse/${data.key}`,
   };
 }
@@ -132,7 +171,7 @@ async function syncAllJiraTasks() {
           await db.prepare(`
             UPDATE tasks
             SET jira_status = ?, jira_summary = ?, jira_assignee = ?, jira_due_date = ?,
-                jira_url = ?, jira_synced_at = datetime('now'), updated_at = datetime('now')
+                jira_url = ?, jira_sprint = ?, jira_synced_at = datetime('now'), updated_at = datetime('now')
             WHERE id = ?
           `).run(
             issue.status,
@@ -140,6 +179,7 @@ async function syncAllJiraTasks() {
             issue.assignee,
             issue.dueDate,
             issue.url,
+            issue.sprint,
             task.id
           );
 
