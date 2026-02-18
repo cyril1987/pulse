@@ -141,6 +141,7 @@ async function runMigrations() {
     '012-add-notification-prefs.sql',
     '013-add-sanity-checks.sql',
     '014-add-generic-monitors.sql',
+    '015-add-query-to-monitors.sql',
   ];
 
   for (const file of migrationFiles) {

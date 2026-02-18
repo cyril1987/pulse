@@ -3087,6 +3087,26 @@ select.staging-cell-input {
   font-size: 0.88rem;
 }
 
+/* SQL Query display */
+.dcd-query-wrap {
+  padding: 1rem 1.15rem;
+  overflow-x: auto;
+}
+
+.dcd-query-code {
+  font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+  font-size: 0.8rem;
+  line-height: 1.6;
+  color: var(--color-text-secondary);
+  background: rgba(0, 0, 0, 0.2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  padding: 1rem;
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
 /* Responsive for data checks */
 @media (max-width: 768px) {
   .dc-summary-cards { grid-template-columns: repeat(2, 1fr); }
