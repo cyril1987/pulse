@@ -60,8 +60,22 @@ function route() {
     clearInterval(Tasks.refreshTimer);
     Tasks.refreshTimer = null;
   }
+  if (typeof SanityChecks !== 'undefined' && SanityChecks.refreshTimer) {
+    clearInterval(SanityChecks.refreshTimer);
+    SanityChecks.refreshTimer = null;
+  }
 
-  if (hash === '/') {
+  if (hash === '/sanity-checks') {
+    SanityChecks.render(app);
+  } else if (hash === '/sanity-checks/add') {
+    SanityCheckForm.render(app);
+  } else if (hash.match(/^\/sanity-checks\/\d+\/edit$/)) {
+    const id = hash.split('/')[2];
+    SanityCheckForm.render(app, id);
+  } else if (hash.match(/^\/sanity-checks\/\d+$/)) {
+    const id = hash.split('/')[2];
+    SanityCheckDetail.render(app, id);
+  } else if (hash === '/') {
     Dashboard.render(app);
   } else if (hash === '/tasks/all') {
     Tasks.render(app, 'all');

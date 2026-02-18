@@ -2,6 +2,7 @@ const db = require('../db');
 const { checkMonitor } = require('./checker');
 const { evaluateAndNotify } = require('./notifier');
 const taskScheduler = require('./taskScheduler');
+const sanityCheckScheduler = require('./sanityCheckScheduler');
 const { checkDueSoonTasks, checkOverdueTasks } = require('./taskNotifier');
 const config = require('../config');
 
@@ -89,6 +90,13 @@ async function tick() {
       await checkOverdueTasks();
     } catch (err) {
       console.error('[SCHEDULER] Task notification error:', err);
+    }
+
+    // Run due sanity checks (trigger clients, poll results, evaluate)
+    try {
+      await sanityCheckScheduler.tick();
+    } catch (err) {
+      console.error('[SCHEDULER] Sanity check error:', err);
     }
 
     // Sync Jira statuses (every 5 minutes, not every tick)
