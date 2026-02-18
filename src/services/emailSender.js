@@ -40,7 +40,13 @@ async function sendEmail({ to, subject, text, html }) {
   const from = config.email.from;
 
   if (useSendGrid()) {
-    const msg = { to, from, subject, text };
+    const msg = {
+      to, from, subject, text,
+      trackingSettings: {
+        clickTracking: { enable: false, enableText: false },
+        openTracking: { enable: false },
+      },
+    };
     if (html) msg.html = html;
     await getSendGridClient().send(msg);
   } else {
