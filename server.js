@@ -17,6 +17,9 @@ const tasksRouter = require('./src/routes/tasks');
 
 const app = express();
 
+// Trust proxy (Vercel, load balancers) so Express sees correct protocol (https)
+app.set('trust proxy', 1);
+
 // On Vercel, ensure DB migrations complete before handling any request
 if (process.env.VERCEL) {
   app.use(async (req, res, next) => {

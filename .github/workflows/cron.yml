@@ -1,0 +1,77 @@
+name: Pulse Cron Jobs
+
+on:
+  schedule:
+    # Monitor checks — every minute
+    - cron: '* * * * *'
+    # Task scheduler — every 15 minutes
+    - cron: '*/15 * * * *'
+    # Jira sync — every 30 minutes
+    - cron: '*/30 * * * *'
+    # Cleanup — every hour
+    - cron: '0 * * * *'
+  workflow_dispatch:
+    inputs:
+      job:
+        description: 'Which cron job to run'
+        required: false
+        default: 'all'
+        type: choice
+        options:
+          - all
+          - monitor-check
+          - task-scheduler
+          - jira-sync
+          - cleanup
+
+env:
+  APP_URL: https://iconcile-pulse.vercel.app
+
+jobs:
+  monitor-check:
+    runs-on: ubuntu-latest
+    if: >-
+      github.event_name == 'schedule' && github.event.schedule == '* * * * *' ||
+      github.event_name == 'workflow_dispatch' && (github.event.inputs.job == 'all' || github.event.inputs.job == 'monitor-check')
+    steps:
+      - name: Run monitor check
+        run: |
+          curl --fail --silent --show-error \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
+            "${{ env.APP_URL }}/api/cron/monitor-check"
+
+  task-scheduler:
+    runs-on: ubuntu-latest
+    if: >-
+      github.event_name == 'schedule' && github.event.schedule == '*/15 * * * *' ||
+      github.event_name == 'workflow_dispatch' && (github.event.inputs.job == 'all' || github.event.inputs.job == 'task-scheduler')
+    steps:
+      - name: Run task scheduler
+        run: |
+          curl --fail --silent --show-error \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
+            "${{ env.APP_URL }}/api/cron/task-scheduler"
+
+  jira-sync:
+    runs-on: ubuntu-latest
+    if: >-
+      github.event_name == 'schedule' && github.event.schedule == '*/30 * * * *' ||
+      github.event_name == 'workflow_dispatch' && (github.event.inputs.job == 'all' || github.event.inputs.job == 'jira-sync')
+    steps:
+      - name: Run Jira sync
+        run: |
+          curl --fail --silent --show-error \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
+            "${{ env.APP_URL }}/api/cron/jira-sync"
+
+  cleanup:
+    runs-on: ubuntu-latest
+    if: >-
+      github.event_name == 'schedule' && github.event.schedule == '0 * * * *' ||
+      github.event_name == 'workflow_dispatch' && (github.event.inputs.job == 'all' || github.event.inputs.job == 'cleanup')
+    steps:
+      - name: Run cleanup
+        run: |
+          curl --fail --silent --show-error \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
+            "${{ env.APP_URL }}/api/cron/cleanup"
