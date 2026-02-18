@@ -574,10 +574,11 @@ const BulkUpload = {
     const payload = {
       monitors: validRows.map(r => {
         const d = { ...r.data };
-        // Ensure defaults are not sent as undefined
-        if (!d.frequency) delete d.frequency;
-        if (!d.expectedStatus) delete d.expectedStatus;
-        if (!d.timeoutMs) delete d.timeoutMs;
+        // Remove empty/undefined fields so server uses defaults — use explicit checks
+        // to avoid silently dropping valid falsy values like 0
+        if (d.frequency === undefined || d.frequency === '') delete d.frequency;
+        if (d.expectedStatus === undefined || d.expectedStatus === '') delete d.expectedStatus;
+        if (d.timeoutMs === undefined || d.timeoutMs === '') delete d.timeoutMs;
         if (!d.name) delete d.name;
         if (!d.group) delete d.group;
         return d;
