@@ -207,19 +207,22 @@ const Tasks = {
             ${task.assignedToName ? escapeHtml(task.assignedToName) : '<span style="color:var(--color-text-tertiary)">Unassigned</span>'}
           </td>
         ` : ''}
-        <td>${task.categoryName ? `<span class="task-category-badge" style="background:${task.categoryColor}20;color:${task.categoryColor}">${escapeHtml(task.categoryName)}</span>` : '<span style="color:var(--color-text-tertiary)">--</span>'}</td>
+        <td>${task.categoryName ? `<span class="task-category-badge" style="background:${Tasks.sanitizeColor(task.categoryColor)}20;color:${Tasks.sanitizeColor(task.categoryColor)}">${escapeHtml(task.categoryName)}</span>` : '<span style="color:var(--color-text-tertiary)">--</span>'}</td>
         <td class="${isOverdue ? 'task-overdue-date' : ''}">${task.dueDate || '<span style="color:var(--color-text-tertiary)">--</span>'}</td>
       </tr>
     `;
   },
 
   renderEmptyState() {
-    const hasFilters = Object.values(Tasks.currentFilters).some(v => v);
+    // Check for active filters beyond the default hideCompleted
+    const hasActiveFilters = Object.entries(Tasks.currentFilters).some(
+      ([key, val]) => key !== 'hideCompleted' && val
+    );
     return `
       <div style="text-align:center;padding:3rem;color:var(--color-text-secondary)">
-        <h3 style="margin-bottom:0.5rem">${hasFilters ? 'No tasks match your filters' : 'No tasks yet'}</h3>
-        <p style="margin-bottom:1rem">${hasFilters ? 'Try adjusting your filters or search terms.' : 'Create your first task to get started.'}</p>
-        ${!hasFilters ? '<a href="#/tasks/new" class="btn btn-primary btn-sm">+ New Task</a>' : ''}
+        <h3 style="margin-bottom:0.5rem">${hasActiveFilters ? 'No tasks match your filters' : 'No tasks yet'}</h3>
+        <p style="margin-bottom:1rem">${hasActiveFilters ? 'Try adjusting your filters or search terms.' : 'Create your first task to get started.'}</p>
+        ${!hasActiveFilters ? '<a href="#/tasks/new" class="btn btn-primary btn-sm">+ New Task</a>' : ''}
       </div>
     `;
   },
@@ -925,5 +928,17 @@ const Tasks = {
     if (l.includes('next')) return 'next';
     if (l.includes('past')) return 'past';
     return 'other';
+  },
+
+  /** Sanitize a color value to prevent XSS via style injection. Only allow hex, rgb, hsl, and named CSS colors. */
+  sanitizeColor(color) {
+    if (!color) return '#888';
+    // Allow hex (#abc, #aabbcc, #aabbccdd)
+    if (/^#[0-9a-fA-F]{3,8}$/.test(color)) return color;
+    // Allow rgb/rgba/hsl/hsla with only safe chars
+    if (/^(rgb|hsl)a?\([0-9,.\s%]+\)$/.test(color)) return color;
+    // Allow simple CSS color names (letters only, max 20 chars)
+    if (/^[a-zA-Z]{1,20}$/.test(color)) return color;
+    return '#888';
   },
 };

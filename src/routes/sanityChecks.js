@@ -4,6 +4,37 @@ const db = require('../db');
 const { validateSanityCheck } = require('../middleware/validateSanityCheck');
 const { executeCheckNow } = require('../services/sanityCheckScheduler');
 
+/** Validate a client URL to prevent SSRF against private/internal networks */
+function validateClientUrl(urlStr) {
+  let parsed;
+  try {
+    parsed = new URL(urlStr);
+  } catch {
+    return 'Invalid URL format';
+  }
+  if (!['http:', 'https:'].includes(parsed.protocol)) {
+    return 'URL must use http or https';
+  }
+  const host = parsed.hostname.toLowerCase();
+  // Block localhost and loopback
+  if (host === 'localhost' || host === '127.0.0.1' || host === '::1' || host === '[::1]') {
+    return 'URL must not point to localhost';
+  }
+  // Block private IPv4 ranges
+  if (/^10\./.test(host) || /^192\.168\./.test(host) || /^172\.(1[6-9]|2\d|3[01])\./.test(host)) {
+    return 'URL must not point to a private IP range';
+  }
+  // Block 169.254.x.x (link-local / cloud metadata)
+  if (/^169\.254\./.test(host)) {
+    return 'URL must not point to a link-local address';
+  }
+  // Block 0.0.0.0
+  if (host === '0.0.0.0') {
+    return 'URL must not point to 0.0.0.0';
+  }
+  return null; // valid
+}
+
 function formatMonitor(row) {
   return {
     id: row.id,
@@ -92,6 +123,10 @@ router.get('/discover', async (req, res) => {
     if (!clientUrl) {
       return res.status(400).json({ error: 'clientUrl query parameter is required' });
     }
+    const ssrfError = validateClientUrl(clientUrl);
+    if (ssrfError) {
+      return res.status(400).json({ error: ssrfError });
+    }
 
     const response = await fetch(`${clientUrl}/api/checks`, {
       signal: AbortSignal.timeout(10000),
@@ -114,6 +149,10 @@ router.post('/discover-all', async (req, res) => {
     const clientUrl = (req.body.clientUrl || '').replace(/\/+$/, '');
     if (!clientUrl) {
       return res.status(400).json({ error: 'clientUrl is required' });
+    }
+    const ssrfError = validateClientUrl(clientUrl);
+    if (ssrfError) {
+      return res.status(400).json({ error: ssrfError });
     }
 
     // Fetch all checks from the pulse-client
@@ -270,6 +309,16 @@ router.put('/:id', validateSanityCheck, async (req, res) => {
     if (!monitor) return res.status(404).json({ error: 'Monitor not found' });
 
     const { name, clientUrl, checkType, expectedMin, expectedMax, severity, frequencySeconds, groupName, notifyEmail } = req.body;
+
+    // Check for duplicate (code, client_url) when clientUrl changes
+    if (clientUrl && clientUrl !== monitor.client_url) {
+      const dup = await db.prepare(
+        'SELECT id FROM sanity_check_monitors WHERE code = ? AND client_url = ? AND id != ?'
+      ).get(monitor.code, clientUrl, req.params.id);
+      if (dup) {
+        return res.status(409).json({ error: `A monitor with code "${monitor.code}" already exists for that client URL` });
+      }
+    }
 
     // Build update dynamically to handle nullable threshold fields correctly
     const sets = [];

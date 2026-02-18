@@ -206,10 +206,10 @@ const Dashboard = {
       });
     });
 
-    // Load sparklines for expanded monitor cards
-    for (const m of monitors) {
-      Dashboard.loadSparkline(m.id);
-    }
+    // Load sparklines only for visible (non-collapsed) monitor cards
+    container.querySelectorAll('canvas[data-monitor-id]').forEach(canvas => {
+      Dashboard.loadSparkline(parseInt(canvas.dataset.monitorId, 10));
+    });
 
     // Load combined sparklines for collapsed groups
     container.querySelectorAll('canvas[data-group-combined-sparkline]').forEach(canvas => {

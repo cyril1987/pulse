@@ -2,6 +2,13 @@ const db = require('../db');
 const { sendEmail } = require('./emailSender');
 
 let lastNotification = {};
+// Periodically clean up stale notification throttle entries (older than 30 minutes)
+setInterval(() => {
+  const cutoff = Date.now() - 30 * 60 * 1000;
+  for (const key of Object.keys(lastNotification)) {
+    if (lastNotification[key] < cutoff) delete lastNotification[key];
+  }
+}, 10 * 60 * 1000); // every 10 minutes
 
 /** HTML-escape a string for safe interpolation into email HTML */
 function esc(str) {

@@ -64,8 +64,8 @@ const SanityCheckDetail = {
           </div>
           ${monitor.lastCheckedAt ? `
             <div class="dcd-hero-time">
-              Last checked ${this.timeAgo(new Date(monitor.lastCheckedAt))}
-              <span class="dcd-hero-timestamp">${new Date(monitor.lastCheckedAt).toLocaleString()}</span>
+              Last checked ${this.timeAgo(new Date(monitor.lastCheckedAt.endsWith('Z') ? monitor.lastCheckedAt : monitor.lastCheckedAt + 'Z'))}
+              <span class="dcd-hero-timestamp">${new Date(monitor.lastCheckedAt.endsWith('Z') ? monitor.lastCheckedAt : monitor.lastCheckedAt + 'Z').toLocaleString()}</span>
             </div>
           ` : '<div class="dcd-hero-time">Never checked</div>'}
         </div>
@@ -130,7 +130,7 @@ const SanityCheckDetail = {
             </div>
             <div class="dcd-config-item">
               <span class="dcd-config-label">Notify</span>
-              <span class="dcd-config-value">${monitor.notifyEmail || '—'}</span>
+              <span class="dcd-config-value">${monitor.notifyEmail ? escapeHtml(monitor.notifyEmail) : '—'}</span>
             </div>
             <div class="dcd-config-item">
               <span class="dcd-config-label">Active</span>
@@ -184,7 +184,7 @@ const SanityCheckDetail = {
         <td>${r.valueChanged ? '<span class="dc-badge dc-badge-changed">changed</span>' : '—'}</td>
         <td>${r.executionTimeMs}ms</td>
         <td class="dcd-error-cell">${r.errorMessage ? escapeHtml(r.errorMessage).substring(0, 100) : '—'}</td>
-        <td class="dcd-time-cell">${new Date(r.checkedAt).toLocaleString()}</td>
+        <td class="dcd-time-cell">${new Date(r.checkedAt && !r.checkedAt.endsWith('Z') ? r.checkedAt + 'Z' : r.checkedAt).toLocaleString()}</td>
       </tr>
     `;
   },

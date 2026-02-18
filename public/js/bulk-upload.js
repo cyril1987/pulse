@@ -6,21 +6,26 @@ const BulkUpload = {
   existingUrls: new Set(),
   existingNames: new Set(),
 
-  render(container) {
+  async render(container) {
     this.parsedRows = [];
     this.currentStep = 1;
     this.importResults = null;
     this.availableGroups = [];
     this.existingUrls = new Set();
     this.existingNames = new Set();
+    this._dataReady = false;
     // Pre-fetch available groups and existing monitors for duplicate checking
-    API.get('/monitors/groups').then(groups => {
+    // Await both before rendering so duplicate detection works immediately
+    try {
+      const [groups, monitors] = await Promise.all([
+        API.get('/monitors/groups').catch(() => []),
+        API.get('/monitors').catch(() => []),
+      ]);
       this.availableGroups = groups;
-    }).catch(() => {});
-    API.get('/monitors').then(monitors => {
       this.existingUrls = new Set(monitors.map(m => m.url));
       this.existingNames = new Set(monitors.map(m => m.name));
-    }).catch(() => {});
+    } catch { /* best effort */ }
+    this._dataReady = true;
     this.renderUploadStep(container);
   },
 

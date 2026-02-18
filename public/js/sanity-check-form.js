@@ -267,10 +267,11 @@ const SanityCheckForm = {
       }
     } catch (err) {
       errorsDiv.style.display = 'block';
-      if (err.errors && Array.isArray(err.errors)) {
-        errorsDiv.innerHTML = err.errors.map(e => `<p>${escapeHtml(e)}</p>`).join('');
+      const serverErrors = err.data?.errors || err.errors;
+      if (Array.isArray(serverErrors) && serverErrors.length > 0) {
+        errorsDiv.innerHTML = serverErrors.map(e => `<p>${escapeHtml(e)}</p>`).join('');
       } else {
-        errorsDiv.innerHTML = `<p>${escapeHtml(err.message || err.error || 'Unknown error')}</p>`;
+        errorsDiv.innerHTML = `<p>${escapeHtml(err.data?.error || err.message || err.error || 'Unknown error')}</p>`;
       }
     }
   },

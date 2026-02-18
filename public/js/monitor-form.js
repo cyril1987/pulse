@@ -212,11 +212,20 @@ const MonitorForm = {
       // Collect custom headers
       const headerRows = headersList.querySelectorAll('.header-row');
       const customHeaders = [];
+      let hasIncompleteHeaders = false;
       for (const row of headerRows) {
         const key = row.querySelector('.header-key').value.trim();
         const value = row.querySelector('.header-value').value;
         if (key && value) {
           customHeaders.push({ key, value });
+        } else if (key && !value) {
+          // Header key present but value empty — warn user (they must re-enter masked values)
+          hasIncompleteHeaders = true;
+        }
+      }
+      if (hasIncompleteHeaders) {
+        if (!confirm('Some headers have a key but no value and will be removed. Custom header values are masked for security and must be re-entered when editing. Continue?')) {
+          return;
         }
       }
 
@@ -230,9 +239,13 @@ const MonitorForm = {
         notifyEmail: document.getElementById('notifyEmail').value.trim(),
       };
 
-      if (groupVal) formData.group = groupVal;
+      // Always send group — empty string or null clears it on the server
+      formData.group = groupVal || null;
       if (customHeaders.length > 0) {
         formData.customHeaders = customHeaders;
+      } else if (monitor) {
+        // Editing: explicitly send empty array to clear headers on the server
+        formData.customHeaders = [];
       }
 
       try {

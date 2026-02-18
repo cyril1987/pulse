@@ -181,7 +181,7 @@ const SanityChecks = {
     const avgExec = monitor.stats24h && monitor.stats24h.avgExecutionTimeMs ? monitor.stats24h.avgExecutionTimeMs : null;
 
     const lastCheckedLabel = monitor.lastCheckedAt
-      ? this.timeAgo(new Date(monitor.lastCheckedAt))
+      ? this.timeAgo(new Date(monitor.lastCheckedAt.endsWith('Z') ? monitor.lastCheckedAt : monitor.lastCheckedAt + 'Z'))
       : 'Never';
 
     return `
