@@ -164,6 +164,10 @@ function evaluate(checkType, actualValue, expectedMin, expectedMax) {
       return (actualValue >= min && actualValue <= max) ? 'pass' : 'fail';
     }
     case 'custom_threshold': {
+      // If no thresholds configured, treat as count_zero (non-zero = fail)
+      if ((expectedMin === null || expectedMin === undefined) && (expectedMax === null || expectedMax === undefined)) {
+        return actualValue === 0 ? 'pass' : 'fail';
+      }
       const min = expectedMin !== null && expectedMin !== undefined ? expectedMin : -Number.MAX_SAFE_INTEGER;
       const max = expectedMax !== null && expectedMax !== undefined ? expectedMax : Number.MAX_SAFE_INTEGER;
       return (actualValue >= min && actualValue <= max) ? 'pass' : 'fail';
