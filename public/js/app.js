@@ -64,6 +64,14 @@ function route() {
     clearInterval(SanityChecks.refreshTimer);
     SanityChecks.refreshTimer = null;
   }
+  if (typeof Health !== 'undefined' && Health.refreshTimer) {
+    clearInterval(Health.refreshTimer);
+    Health.refreshTimer = null;
+  }
+  if (typeof MonitorDetail !== 'undefined' && MonitorDetail._countdownTimer) {
+    clearInterval(MonitorDetail._countdownTimer);
+    MonitorDetail._countdownTimer = null;
+  }
   if (hash === '/sanity-checks') {
     SanityChecks.render(app);
   } else if (hash === '/sanity-checks/add') {

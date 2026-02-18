@@ -263,7 +263,7 @@ router.post('/', validateSanityCheck, async (req, res) => {
 });
 
 // PUT /api/sanity-checks/:id — Update monitor
-router.put('/:id', async (req, res) => {
+router.put('/:id', validateSanityCheck, async (req, res) => {
   try {
     const monitor = await db.prepare('SELECT * FROM sanity_check_monitors WHERE id = ?').get(req.params.id);
     if (!monitor) return res.status(404).json({ error: 'Monitor not found' });

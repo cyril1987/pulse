@@ -296,14 +296,10 @@ const SanityChecks = {
       runAllBtn.addEventListener('click', () => this.runAll(app));
     }
 
-    // Sync button(s)
+    // Sync button(s) — use || fallback so the empty-state button is also covered
     const syncBtn = document.getElementById('btn-sync-client') || document.getElementById('btn-sync-client-empty');
     if (syncBtn) {
       syncBtn.addEventListener('click', () => this.syncFromClient(app));
-    }
-    const syncBtnEmpty = document.getElementById('btn-sync-client-empty');
-    if (syncBtnEmpty) {
-      syncBtnEmpty.addEventListener('click', () => this.syncFromClient(app));
     }
 
     // Group toggles

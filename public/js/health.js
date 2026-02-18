@@ -27,7 +27,7 @@ const Health = {
         } catch {}
       }, 30000);
     } catch (err) {
-      container.innerHTML = `<div class="empty-state"><h2>Error</h2><p>${err.message}</p></div>`;
+      container.innerHTML = `<div class="empty-state"><h2>Error</h2><p>${escapeHtml(err.message)}</p></div>`;
     }
   },
 

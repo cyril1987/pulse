@@ -143,26 +143,88 @@ async function addSystemComment(taskId, userId, body) {
   ).run(taskId, userId, body);
 }
 
+function getNthWeekdayOfMonth(year, month, dayOfWeek, n) {
+  if (n === -1) {
+    const lastDay = new Date(year, month + 1, 0);
+    for (let d = lastDay.getDate(); d >= 1; d--) {
+      const dt = new Date(year, month, d);
+      if (dt.getDay() === dayOfWeek) return dt;
+    }
+    return null;
+  }
+  const first = new Date(year, month, 1);
+  let firstOccurrence = 1 + ((dayOfWeek - first.getDay() + 7) % 7);
+  const targetDay = firstOccurrence + (n - 1) * 7;
+  const maxDay = new Date(year, month + 1, 0).getDate();
+  if (targetDay > maxDay) return null;
+  return new Date(year, month, targetDay);
+}
+
 function computeNextOccurrence(pattern, currentDateStr) {
   const d = new Date(currentDateStr);
   const interval = pattern.interval || 1;
 
   switch (pattern.type) {
-    case 'daily':
+    case 'daily': {
+      if (pattern.daysOfWeek && Array.isArray(pattern.daysOfWeek) && pattern.daysOfWeek.length > 0) {
+        const days = pattern.daysOfWeek.map(Number).sort((a, b) => a - b);
+        let next = new Date(d);
+        next.setDate(next.getDate() + 1);
+        for (let i = 0; i < 8; i++) {
+          if (days.includes(next.getDay())) break;
+          next.setDate(next.getDate() + 1);
+        }
+        return next.toISOString();
+      }
       d.setDate(d.getDate() + interval);
       break;
-    case 'weekly':
-      d.setDate(d.getDate() + (7 * interval));
+    }
+    case 'weekly': {
+      if (pattern.dayOfWeek !== undefined && pattern.dayOfWeek !== null) {
+        const targetDay = Array.isArray(pattern.dayOfWeek) ? pattern.dayOfWeek[0] : parseInt(pattern.dayOfWeek, 10);
+        d.setDate(d.getDate() + (7 * interval));
+        const diff = (targetDay - d.getDay() + 7) % 7;
+        if (diff > 0) d.setDate(d.getDate() + diff);
+      } else {
+        d.setDate(d.getDate() + (7 * interval));
+      }
       break;
-    case 'monthly':
+    }
+    case 'monthly': {
       d.setMonth(d.getMonth() + interval);
-      if (pattern.dayOfMonth) d.setDate(Math.min(pattern.dayOfMonth, new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate()));
+      if (pattern.monthOption === 'lastDay') {
+        const lastDay = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
+        d.setDate(lastDay);
+      } else if (pattern.monthOption === 'nthWeekday' && pattern.nthWeekday) {
+        const nth = getNthWeekdayOfMonth(
+          d.getFullYear(), d.getMonth(),
+          parseInt(pattern.nthWeekday.day, 10),
+          parseInt(pattern.nthWeekday.n, 10)
+        );
+        if (nth) {
+          d.setDate(nth.getDate());
+        } else {
+          const fallback = getNthWeekdayOfMonth(
+            d.getFullYear(), d.getMonth(),
+            parseInt(pattern.nthWeekday.day, 10), -1
+          );
+          if (fallback) d.setDate(fallback.getDate());
+        }
+      } else if (pattern.dayOfMonth) {
+        const maxDay = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
+        d.setDate(Math.min(pattern.dayOfMonth, maxDay));
+      }
       break;
-    case 'yearly':
+    }
+    case 'yearly': {
       d.setFullYear(d.getFullYear() + interval);
       if (pattern.month) d.setMonth(pattern.month - 1);
-      if (pattern.dayOfMonth) d.setDate(Math.min(pattern.dayOfMonth, new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate()));
+      if (pattern.dayOfMonth) {
+        const maxDay = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
+        d.setDate(Math.min(pattern.dayOfMonth, maxDay));
+      }
       break;
+    }
   }
   return d.toISOString();
 }
@@ -732,7 +794,7 @@ router.post('/:id/link-jira', async (req, res) => {
       WHERE id = ?
     `).run(
       issue.key, issue.status, issue.summary, issue.assignee,
-      issue.dueDate, issue.url, issue.sprint, req.params.id
+      issue.dueDate, issue.url, issue.sprint ? JSON.stringify(issue.sprint) : null, req.params.id
     );
 
     await addSystemComment(
@@ -827,7 +889,7 @@ router.post('/:id/sync-jira', async (req, res) => {
       WHERE id = ?
     `).run(
       issue.status, issue.summary, issue.assignee,
-      issue.dueDate, issue.url, issue.sprint, req.params.id
+      issue.dueDate, issue.url, issue.sprint ? JSON.stringify(issue.sprint) : null, req.params.id
     );
 
     if (oldStatus && oldStatus !== issue.status) {

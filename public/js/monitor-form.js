@@ -6,7 +6,7 @@ const MonitorForm = {
       try {
         monitor = await API.get(`/monitors/${editId}`);
       } catch (err) {
-        container.innerHTML = `<div class="empty-state"><h2>Monitor not found</h2><p>${err.message}</p></div>`;
+        container.innerHTML = `<div class="empty-state"><h2>Monitor not found</h2><p>${escapeHtml(err.message)}</p></div>`;
         return;
       }
     }
@@ -255,7 +255,8 @@ const MonitorForm = {
 };
 
 function escapeAttr(str) {
-  return str
+  if (str == null) return '';
+  return String(str)
     .replace(/&/g, '&amp;')
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#39;')

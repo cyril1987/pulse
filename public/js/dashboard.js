@@ -24,7 +24,7 @@ const Dashboard = {
         }
       }, 30000);
     } catch (err) {
-      container.innerHTML = `<div class="empty-state"><h2>Error loading monitors</h2><p>${err.message}</p></div>`;
+      container.innerHTML = `<div class="empty-state"><h2>Error loading monitors</h2><p>${escapeHtml(err.message)}</p></div>`;
     }
   },
 
@@ -364,8 +364,4 @@ const Dashboard = {
   },
 };
 
-function escapeHtml(str) {
-  const div = document.createElement('div');
-  div.textContent = str;
-  return div.innerHTML;
-}
+// escapeHtml is defined in api.js (loaded before this file)
