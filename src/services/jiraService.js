@@ -122,9 +122,10 @@ async function fetchIssue(issueKey) {
 async function searchIssues(query, maxResults = 10) {
   // If it looks like a Jira key (e.g. PROJ-123), search by key
   const isKey = /^[A-Z][A-Z0-9_]+-\d+$/i.test(query);
+  const escaped = query.replace(/"/g, '\\"');
   const jql = isKey
-    ? `key = "${query.toUpperCase()}"`
-    : `summary ~ "${query.replace(/"/g, '\\"')}" OR key = "${query.toUpperCase()}" ORDER BY updated DESC`;
+    ? `key = "${escaped.toUpperCase()}"`
+    : `summary ~ "${escaped}" OR key = "${escaped.toUpperCase()}" ORDER BY updated DESC`;
 
   const data = await jiraFetch(
     `/rest/api/3/search?jql=${encodeURIComponent(jql)}&maxResults=${maxResults}&fields=status,summary,assignee,duedate`
@@ -179,7 +180,7 @@ async function syncAllJiraTasks() {
             issue.assignee,
             issue.dueDate,
             issue.url,
-            issue.sprint,
+            issue.sprint ? JSON.stringify(issue.sprint) : null,
             task.id
           );
 

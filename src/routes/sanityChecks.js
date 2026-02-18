@@ -354,7 +354,10 @@ router.delete('/:id', async (req, res) => {
     const monitor = await db.prepare('SELECT * FROM sanity_check_monitors WHERE id = ?').get(req.params.id);
     if (!monitor) return res.status(404).json({ error: 'Monitor not found' });
 
-    await db.prepare('DELETE FROM sanity_check_monitors WHERE id = ?').run(req.params.id);
+    await db.transaction(async (tx) => {
+      await tx.prepare('DELETE FROM sanity_check_results WHERE monitor_id = ?').run(req.params.id);
+      await tx.prepare('DELETE FROM sanity_check_monitors WHERE id = ?').run(req.params.id);
+    });
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: 'Failed to delete monitor' });

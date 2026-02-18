@@ -265,8 +265,9 @@ router.get('/tasks/ismart-tickets', async (req, res) => {
 
   if (state) { conditions.push('it.state = ?'); params.push(state); }
   if (search) {
-    conditions.push('(it.reference_id LIKE ? OR it.short_description LIKE ?)');
-    params.push(`%${search}%`, `%${search}%`);
+    const escapedSearch = search.replace(/[%_]/g, '\\$&');
+    conditions.push("(it.reference_id LIKE ? ESCAPE '\\' OR it.short_description LIKE ? ESCAPE '\\')");
+    params.push(`%${escapedSearch}%`, `%${escapedSearch}%`);
   }
 
   const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';

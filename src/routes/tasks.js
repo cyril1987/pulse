@@ -126,8 +126,9 @@ function applyFilters(req) {
     conditions.push('t.parent_task_id IS NULL');
   }
   if (search) {
-    conditions.push('(t.title LIKE ? OR t.description LIKE ?)');
-    params.push(`%${search}%`, `%${search}%`);
+    const escapedSearch = search.replace(/[%_]/g, '\\$&');
+    conditions.push("(t.title LIKE ? ESCAPE '\\' OR t.description LIKE ? ESCAPE '\\')");
+    params.push(`%${escapedSearch}%`, `%${escapedSearch}%`);
   }
 
   const limit = Math.min(parseInt(req.query.limit || '50', 10) || 50, 200);
@@ -682,7 +683,13 @@ router.delete('/:id', async (req, res) => {
   }
   if (denyPrivateAccess(existing, req.user.id, res)) return;
 
-  await db.prepare('DELETE FROM tasks WHERE id = ?').run(req.params.id);
+  await db.transaction(async (tx) => {
+    await tx.prepare('DELETE FROM task_comments WHERE task_id = ?').run(req.params.id);
+    await tx.prepare('DELETE FROM task_notifications WHERE task_id = ?').run(req.params.id);
+    await tx.prepare('UPDATE tasks SET parent_task_id = NULL WHERE parent_task_id = ?').run(req.params.id);
+    await tx.prepare('UPDATE ismart_tickets SET task_id = NULL WHERE task_id = ?').run(req.params.id);
+    await tx.prepare('DELETE FROM tasks WHERE id = ?').run(req.params.id);
+  });
   res.status(204).end();
 });
 

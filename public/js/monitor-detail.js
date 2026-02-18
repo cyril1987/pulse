@@ -302,6 +302,10 @@ const MonitorDetail = {
       const diff = until - now;
       if (diff <= 0) {
         el.textContent = 'resuming...';
+        if (MonitorDetail._countdownTimer) {
+          clearInterval(MonitorDetail._countdownTimer);
+          MonitorDetail._countdownTimer = null;
+        }
         return;
       }
       const h = Math.floor(diff / 3600000);
