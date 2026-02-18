@@ -196,7 +196,7 @@ const Tasks = {
           </div>
           ${task.jiraKey || (task.source === 'ismart' && task.sourceRef) ? `
             <div class="task-links-row">
-              ${task.jiraKey ? `<a href="${escapeHtml(task.jiraUrl || '#')}" target="_blank" class="jira-inline-chip" onclick="event.stopPropagation()"><span class="jira-inline-key">${escapeHtml(task.jiraKey)}</span><span class="jira-chip-sep"></span><span class="jira-status-badge jira-status-${Tasks.jiraStatusCategory(task.jiraStatus)}" style="font-size:0.6rem;padding:0.05rem 0.3rem">${escapeHtml(task.jiraStatus || 'Unknown')}</span><span class="jira-chip-sep"></span><span class="jira-sprint-badge ${task.jiraSprint ? 'has-sprint' : 'no-sprint'}">${escapeHtml(task.jiraSprint || 'No Sprint')}</span><span class="jira-chip-sep"></span><span class="jira-inline-meta">${escapeHtml(task.jiraAssignee || 'Unassigned')}</span></a>` : ''}
+              ${task.jiraKey ? `<a href="${escapeHtml(task.jiraUrl || '#')}" target="_blank" class="jira-inline-chip" onclick="event.stopPropagation()"><span class="jira-inline-key">${escapeHtml(task.jiraKey)}</span><span class="jira-chip-sep"></span><span class="jira-status-badge jira-status-${Tasks.jiraStatusCategory(task.jiraStatus)}" style="font-size:0.6rem;padding:0.05rem 0.3rem">${escapeHtml(task.jiraStatus || 'Unknown')}</span><span class="jira-chip-sep"></span><span class="jira-sprint-badge ${task.jiraSprint ? 'sprint-' + Tasks.sprintClass(task.jiraSprint.label) : 'no-sprint'}" title="${task.jiraSprint ? escapeHtml(task.jiraSprint.name) : 'Not in any sprint'}">${escapeHtml(task.jiraSprint ? task.jiraSprint.label : 'No Sprint')}</span><span class="jira-chip-sep"></span><span class="jira-inline-meta">${escapeHtml(task.jiraAssignee || 'Unassigned')}</span></a>` : ''}
               ${task.source === 'ismart' && task.sourceRef ? `<span class="ismart-ref-badge" title="iSmart ticket">${escapeHtml(task.sourceRef)}</span>` : ''}
             </div>
           ` : ''}
@@ -916,5 +916,14 @@ const Tasks = {
     if (s === 'done' || s === 'closed' || s === 'resolved') return 'done';
     if (s === 'in progress' || s === 'in review' || s === 'in development') return 'indeterminate';
     return 'todo';
+  },
+
+  sprintClass(label) {
+    if (!label) return 'none';
+    const l = label.toLowerCase();
+    if (l.includes('current')) return 'current';
+    if (l.includes('next')) return 'next';
+    if (l.includes('past')) return 'past';
+    return 'other';
   },
 };

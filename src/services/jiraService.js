@@ -6,23 +6,36 @@ const db = require('../db');
 const SPRINT_FIELD = process.env.JIRA_SPRINT_FIELD || 'customfield_10020';
 
 /**
- * Extract a sprint label from Jira's sprint field value.
- * The sprint field is an array of sprint objects; we pick the most relevant one.
- * Returns "Current Sprint", "Next Sprint", or null (Not in Sprint).
+ * Extract sprint info from Jira's sprint field value.
+ * The sprint field is an array of sprint objects with { name, state, ... }.
+ * States: "active" (current), "future" (upcoming), "closed" (past).
+ *
+ * Returns JSON string: { "label": "Current Sprint", "name": "Sprint 42" }
+ * or null if not in any sprint.
  */
-function extractSprintLabel(sprintField) {
+function extractSprintInfo(sprintField) {
   if (!sprintField || !Array.isArray(sprintField) || sprintField.length === 0) {
     return null;
   }
 
-  // Find active sprint first (current), then future sprint (next)
+  // Priority: active > future > closed (most recent)
   const active = sprintField.find(s => s.state === 'active');
-  if (active) return active.name || 'Current Sprint';
+  if (active) {
+    return JSON.stringify({ label: 'Current Sprint', name: active.name || 'Current Sprint' });
+  }
 
   const future = sprintField.find(s => s.state === 'future');
-  if (future) return future.name || 'Next Sprint';
+  if (future) {
+    return JSON.stringify({ label: 'Next Sprint', name: future.name || 'Next Sprint' });
+  }
 
-  // Closed sprints only — issue was in a past sprint
+  // Only closed sprints remain — pick the most recent one (last in array)
+  const closed = sprintField.filter(s => s.state === 'closed');
+  if (closed.length > 0) {
+    const latest = closed[closed.length - 1];
+    return JSON.stringify({ label: 'Past Sprint', name: latest.name || 'Past Sprint' });
+  }
+
   return null;
 }
 
@@ -97,7 +110,7 @@ async function fetchIssue(issueKey) {
     assignee: fields.assignee?.displayName || null,
     assigneeAvatar: fields.assignee?.avatarUrls?.['24x24'] || null,
     dueDate: fields.duedate || null,
-    sprint: extractSprintLabel(fields[SPRINT_FIELD]),
+    sprint: extractSprintInfo(fields[SPRINT_FIELD]),
     url: `${config.jira.baseUrl}/browse/${data.key}`,
   };
 }

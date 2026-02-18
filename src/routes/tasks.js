@@ -38,7 +38,7 @@ function formatTask(row) {
     jiraAssignee: row.jira_assignee || null,
     jiraDueDate: row.jira_due_date || null,
     jiraUrl: row.jira_url || null,
-    jiraSprint: row.jira_sprint || null,
+    jiraSprint: row.jira_sprint ? JSON.parse(row.jira_sprint) : null,
     jiraSyncedAt: row.jira_synced_at || null,
     isPrivate: row.is_private === 1,
     createdAt: row.created_at,
