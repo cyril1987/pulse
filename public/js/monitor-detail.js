@@ -1,5 +1,8 @@
 const MonitorDetail = {
+  _checksOffset: 0,
+
   async render(container, id) {
+    MonitorDetail._checksOffset = 0;
     container.innerHTML = '<div class="loading">Loading monitor...</div>';
 
     try {
@@ -134,8 +137,16 @@ const MonitorDetail = {
         </table>
         ${
           checksPage.total > checksPage.limit
-            ? `<div class="pagination">
-                <span>${checksPage.total} total checks</span>
+            ? `<div class="pagination" style="display:flex;align-items:center;justify-content:space-between;padding:0.75rem 0;">
+                <span style="font-size:0.82rem;color:var(--color-text-secondary)">${checksPage.total} total checks — showing ${checksPage.offset + 1}–${Math.min(checksPage.offset + checksPage.limit, checksPage.total)}</span>
+                <div style="display:flex;gap:0.5rem;">
+                  ${checksPage.offset > 0
+                    ? `<button class="btn btn-secondary btn-sm" id="checks-prev">← Previous</button>`
+                    : ''}
+                  ${checksPage.offset + checksPage.limit < checksPage.total
+                    ? `<button class="btn btn-secondary btn-sm" id="checks-next">Next →</button>`
+                    : ''}
+                </div>
               </div>`
             : ''
         }
@@ -177,6 +188,28 @@ const MonitorDetail = {
         return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
       });
       Chart.line(canvas, { values, labels });
+    }
+
+    // Bind pagination buttons
+    const prevBtn = document.getElementById('checks-prev');
+    const nextBtn = document.getElementById('checks-next');
+    if (prevBtn) {
+      prevBtn.addEventListener('click', async () => {
+        const newOffset = Math.max(0, checksPage.offset - checksPage.limit);
+        try {
+          const newPage = await API.get(`/monitors/${monitor.id}/checks?limit=${checksPage.limit}&offset=${newOffset}`);
+          MonitorDetail.renderContent(container, monitor, stats, latestChecks, newPage);
+        } catch { /* silent */ }
+      });
+    }
+    if (nextBtn) {
+      nextBtn.addEventListener('click', async () => {
+        const newOffset = checksPage.offset + checksPage.limit;
+        try {
+          const newPage = await API.get(`/monitors/${monitor.id}/checks?limit=${checksPage.limit}&offset=${newOffset}`);
+          MonitorDetail.renderContent(container, monitor, stats, latestChecks, newPage);
+        } catch { /* silent */ }
+      });
     }
   },
 

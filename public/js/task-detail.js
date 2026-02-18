@@ -31,7 +31,7 @@ const TaskDetail = {
     const priorityColors = { urgent: 'var(--color-down)', high: '#f59e0b', medium: 'var(--color-primary)', low: 'var(--color-unknown)' };
     const today = new Date().toISOString().split('T')[0];
     const isOverdue = task.dueDate && task.status !== 'done' && task.status !== 'cancelled' && task.dueDate < today;
-    const statusLabel = task.status.replace('_', ' ');
+    const statusLabel = task.status.replace(/_/g, ' ');
 
     container.innerHTML = `
       <!-- Header -->
@@ -212,7 +212,7 @@ const TaskDetail = {
                   const stOverdue = st.dueDate && st.status !== 'done' && st.status !== 'cancelled' && st.dueDate < today;
                   return `
                     <tr class="task-row" style="cursor:pointer" onclick="location.hash='#/tasks/${st.id}'">
-                      <td><span class="task-status-badge task-status-${st.status}">${st.status.replace('_', ' ')}</span></td>
+                      <td><span class="task-status-badge task-status-${st.status}">${st.status.replace(/_/g, ' ')}</span></td>
                       <td>${escapeHtml(st.title)}</td>
                       <td><span class="task-priority-dot" style="background:${priorityColors[st.priority]}" title="${st.priority}"></span> ${st.priority}</td>
                       <td class="${stOverdue ? 'task-overdue-date' : ''}">${st.dueDate || '--'}</td>

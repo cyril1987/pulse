@@ -34,7 +34,8 @@ const db = require('../db');
 const hasGoogle = !!(config.google.clientId && config.google.clientSecret);
 const hasMicrosoft = !!(config.microsoft.clientId && config.microsoft.clientSecret);
 
-const enableDevLogin = !hasGoogle && !hasMicrosoft || process.env.DEV_LOGIN === 'true';
+// Only enabled when no SSO providers are configured — DEV_LOGIN env var cannot override this
+const enableDevLogin = !hasGoogle && !hasMicrosoft;
 
 // Dev login — always register the route; guarded by enableDevLogin flag
 router.post('/auth/dev-login', async (req, res) => {

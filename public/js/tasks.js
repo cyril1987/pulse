@@ -178,7 +178,7 @@ const Tasks = {
     const priorityColors = { urgent: 'var(--color-down)', high: '#f59e0b', medium: 'var(--color-primary)', low: 'var(--color-unknown)' };
     const today = new Date().toISOString().split('T')[0];
     const isOverdue = task.dueDate && task.status !== 'done' && task.status !== 'cancelled' && task.dueDate < today;
-    const statusLabel = task.status.replace('_', ' ');
+    const statusLabel = task.status.replace(/_/g, ' ');
     const isSubtask = !!task.parentTaskId;
 
     return `
@@ -357,7 +357,7 @@ const Tasks = {
         <div class="subtask-parent-banner">
           <span style="color:var(--color-text-tertiary);font-size:0.78rem">Parent task:</span>
           <a href="#/tasks/${parentTask.id}" class="subtask-parent-link">${escapeHtml(parentTask.title)}</a>
-          <span class="task-status-badge task-status-${parentTask.status}" style="font-size:0.6rem;padding:0.1rem 0.4rem">${parentTask.status.replace('_', ' ')}</span>
+          <span class="task-status-badge task-status-${parentTask.status}" style="font-size:0.6rem;padding:0.1rem 0.4rem">${parentTask.status.replace(/_/g, ' ')}</span>
         </div>
         ` : ''}
         <div id="form-errors"></div>

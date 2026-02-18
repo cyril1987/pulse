@@ -86,14 +86,14 @@ const API = {
   _handleUnauthorized(res) {
     if (res.status === 401) {
       window.location.href = '/login.html';
-      return true;
+      // Throw to prevent callers from processing the undefined return
+      throw new Error('Session expired');
     }
-    return false;
   },
 
   async get(path) {
     const res = await fetch(`/api${path}`);
-    if (this._handleUnauthorized(res)) return;
+    this._handleUnauthorized(res);
     if (!res.ok) {
       const body = await res.json().catch(() => ({ error: res.statusText }));
       throw new Error(body.error || body.errors?.join(', ') || res.statusText);
@@ -107,7 +107,7 @@ const API = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
     });
-    if (this._handleUnauthorized(res)) return;
+    this._handleUnauthorized(res);
     if (!res.ok) {
       const data = await res.json().catch(() => ({ error: res.statusText }));
       const err = new Error(data.error || data.errors?.join(', ') || res.statusText);
@@ -124,7 +124,7 @@ const API = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
     });
-    if (this._handleUnauthorized(res)) return;
+    this._handleUnauthorized(res);
     if (!res.ok) {
       const data = await res.json().catch(() => ({ error: res.statusText }));
       const err = new Error(data.error || data.errors?.join(', ') || res.statusText);
@@ -136,7 +136,7 @@ const API = {
 
   async delete(path) {
     const res = await fetch(`/api${path}`, { method: 'DELETE' });
-    if (this._handleUnauthorized(res)) return;
+    this._handleUnauthorized(res);
     if (!res.ok) {
       const data = await res.json().catch(() => ({ error: res.statusText }));
       throw new Error(data.error || res.statusText);
