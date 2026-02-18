@@ -279,6 +279,7 @@ router.get('/tasks/ismart-tickets', async (req, res) => {
     FROM ismart_tickets it
     LEFT JOIN tasks t ON it.task_id = t.id
     LEFT JOIN users u ON t.assigned_to = u.id
+    ${where}
     ORDER BY it.opened_at DESC
     LIMIT ? OFFSET ?
   `).all(...params, limit, offset);

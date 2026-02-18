@@ -28,7 +28,7 @@ function formatTask(row) {
     parentTaskId: row.parent_task_id || null,
     parentTaskTitle: row.parent_task_title || null,
     isRecurringTemplate: row.is_recurring_template === 1,
-    recurrencePattern: row.recurrence_pattern ? JSON.parse(row.recurrence_pattern) : null,
+    recurrencePattern: row.recurrence_pattern ? (() => { try { return JSON.parse(row.recurrence_pattern); } catch { return null; } })() : null,
     recurrenceNextAt: row.recurrence_next_at || null,
     recurrenceEndAt: row.recurrence_end_at || null,
     recurringTemplateId: row.recurring_template_id || null,

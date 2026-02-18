@@ -270,31 +270,25 @@ router.put('/:id', async (req, res) => {
 
     const { name, clientUrl, checkType, expectedMin, expectedMax, severity, frequencySeconds, groupName, notifyEmail } = req.body;
 
-    await db.prepare(`
-      UPDATE sanity_check_monitors SET
-        name = COALESCE(?, name),
-        client_url = COALESCE(?, client_url),
-        check_type = COALESCE(?, check_type),
-        expected_min = CASE WHEN ?1 IS NOT NULL THEN ?2 ELSE expected_min END,
-        expected_max = CASE WHEN ?3 IS NOT NULL THEN ?4 ELSE expected_max END,
-        severity = COALESCE(?, severity),
-        frequency_seconds = COALESCE(?, frequency_seconds),
-        group_name = COALESCE(?, group_name),
-        notify_email = COALESCE(?, notify_email),
-        updated_at = datetime('now')
-      WHERE id = ?
-    `).run(
-      name || null,
-      clientUrl || null,
-      checkType || null,
-      expectedMin !== undefined ? 1 : null, expectedMin !== undefined ? expectedMin : null,
-      expectedMax !== undefined ? 1 : null, expectedMax !== undefined ? expectedMax : null,
-      severity || null,
-      frequencySeconds || null,
-      groupName !== undefined ? groupName : null,
-      notifyEmail !== undefined ? notifyEmail : null,
-      req.params.id
-    );
+    // Build update dynamically to handle nullable threshold fields correctly
+    const sets = [];
+    const params = [];
+
+    if (name) { sets.push('name = ?'); params.push(name); }
+    if (clientUrl) { sets.push('client_url = ?'); params.push(clientUrl); }
+    if (checkType) { sets.push('check_type = ?'); params.push(checkType); }
+    if (expectedMin !== undefined) { sets.push('expected_min = ?'); params.push(expectedMin); }
+    if (expectedMax !== undefined) { sets.push('expected_max = ?'); params.push(expectedMax); }
+    if (severity) { sets.push('severity = ?'); params.push(severity); }
+    if (frequencySeconds) { sets.push('frequency_seconds = ?'); params.push(frequencySeconds); }
+    if (groupName !== undefined) { sets.push('group_name = ?'); params.push(groupName); }
+    if (notifyEmail !== undefined) { sets.push('notify_email = ?'); params.push(notifyEmail); }
+
+    if (sets.length > 0) {
+      sets.push("updated_at = datetime('now')");
+      params.push(req.params.id);
+      await db.prepare(`UPDATE sanity_check_monitors SET ${sets.join(', ')} WHERE id = ?`).run(...params);
+    }
 
     const updated = await db.prepare('SELECT * FROM sanity_check_monitors WHERE id = ?').get(req.params.id);
     res.json(formatMonitor(updated));

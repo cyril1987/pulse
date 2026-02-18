@@ -113,12 +113,16 @@ async function sendRecoveryAlert(monitor) {
 
   let downtimeDuration = 'unknown';
   if (monitor.last_status_change_at) {
-    const downSince = new Date(monitor.last_status_change_at + 'Z').getTime();
-    const now = Date.now();
-    const diffMs = now - downSince;
-    const mins = Math.floor(diffMs / 60000);
-    const secs = Math.floor((diffMs % 60000) / 1000);
-    downtimeDuration = mins > 0 ? `${mins}m ${secs}s` : `${secs}s`;
+    // SQLite datetime is "YYYY-MM-DD HH:MM:SS" (UTC, no timezone) — convert to valid ISO
+    const isoStr = monitor.last_status_change_at.replace(' ', 'T') + 'Z';
+    const downSince = new Date(isoStr).getTime();
+    if (!isNaN(downSince)) {
+      const now = Date.now();
+      const diffMs = now - downSince;
+      const mins = Math.floor(diffMs / 60000);
+      const secs = Math.floor((diffMs % 60000) / 1000);
+      downtimeDuration = mins > 0 ? `${mins}m ${secs}s` : `${secs}s`;
+    }
   }
 
   const subject = `[RECOVERED] Monitor Alert: ${monitor.name} (${monitor.url})`;

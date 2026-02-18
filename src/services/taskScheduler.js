@@ -123,7 +123,19 @@ async function tick() {
 
   await db.transaction(async (tx) => {
     for (const tmpl of templates) {
-      const pattern = JSON.parse(tmpl.recurrence_pattern);
+      let pattern;
+      try {
+        pattern = JSON.parse(tmpl.recurrence_pattern);
+      } catch (err) {
+        console.error(`[TASKS] Invalid recurrence_pattern for template #${tmpl.id}: ${err.message}`);
+        // Clear broken next_at so we don't retry every tick
+        await tx.prepare("UPDATE tasks SET recurrence_next_at = NULL, updated_at = datetime('now') WHERE id = ?").run(tmpl.id);
+        continue;
+      }
+      if (!tmpl.recurrence_next_at) {
+        console.warn(`[TASKS] Template #${tmpl.id} has NULL recurrence_next_at, skipping`);
+        continue;
+      }
       const dueDate = tmpl.recurrence_next_at.split(' ')[0]; // YYYY-MM-DD
 
       // Duplicate check
