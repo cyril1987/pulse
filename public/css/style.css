@@ -1978,6 +1978,23 @@ select.staging-cell-input {
   color: var(--color-text-tertiary);
 }
 
+.jira-sprint-badge {
+  font-size: 0.6rem;
+  font-weight: 500;
+  padding: 0.05rem 0.35rem;
+  border-radius: 3px;
+}
+
+.jira-sprint-badge.has-sprint {
+  background: rgba(59, 130, 246, 0.15);
+  color: #60a5fa;
+}
+
+.jira-sprint-badge.no-sprint {
+  color: var(--color-text-tertiary);
+  font-style: italic;
+}
+
 .jira-preview {
   padding: 0.75rem;
   border-radius: 6px;

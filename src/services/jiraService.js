@@ -1,6 +1,31 @@
 const config = require('../config');
 const db = require('../db');
 
+// Sprint field ID — Jira Cloud uses customfield_10020 by default for sprints.
+// Override via JIRA_SPRINT_FIELD env var if your instance uses a different field.
+const SPRINT_FIELD = process.env.JIRA_SPRINT_FIELD || 'customfield_10020';
+
+/**
+ * Extract a sprint label from Jira's sprint field value.
+ * The sprint field is an array of sprint objects; we pick the most relevant one.
+ * Returns "Current Sprint", "Next Sprint", or null (Not in Sprint).
+ */
+function extractSprintLabel(sprintField) {
+  if (!sprintField || !Array.isArray(sprintField) || sprintField.length === 0) {
+    return null;
+  }
+
+  // Find active sprint first (current), then future sprint (next)
+  const active = sprintField.find(s => s.state === 'active');
+  if (active) return active.name || 'Current Sprint';
+
+  const future = sprintField.find(s => s.state === 'future');
+  if (future) return future.name || 'Next Sprint';
+
+  // Closed sprints only — issue was in a past sprint
+  return null;
+}
+
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
 function isConfigured() {
@@ -58,7 +83,7 @@ async function testConnection() {
  */
 async function fetchIssue(issueKey) {
   const data = await jiraFetch(
-    `/rest/api/3/issue/${encodeURIComponent(issueKey)}?fields=status,summary,issuetype,priority,assignee,duedate`
+    `/rest/api/3/issue/${encodeURIComponent(issueKey)}?fields=status,summary,issuetype,priority,assignee,duedate,${SPRINT_FIELD}`
   );
 
   const fields = data.fields || {};
@@ -72,6 +97,7 @@ async function fetchIssue(issueKey) {
     assignee: fields.assignee?.displayName || null,
     assigneeAvatar: fields.assignee?.avatarUrls?.['24x24'] || null,
     dueDate: fields.duedate || null,
+    sprint: extractSprintLabel(fields[SPRINT_FIELD]),
     url: `${config.jira.baseUrl}/browse/${data.key}`,
   };
 }
@@ -132,7 +158,7 @@ async function syncAllJiraTasks() {
           await db.prepare(`
             UPDATE tasks
             SET jira_status = ?, jira_summary = ?, jira_assignee = ?, jira_due_date = ?,
-                jira_url = ?, jira_synced_at = datetime('now'), updated_at = datetime('now')
+                jira_url = ?, jira_sprint = ?, jira_synced_at = datetime('now'), updated_at = datetime('now')
             WHERE id = ?
           `).run(
             issue.status,
@@ -140,6 +166,7 @@ async function syncAllJiraTasks() {
             issue.assignee,
             issue.dueDate,
             issue.url,
+            issue.sprint,
             task.id
           );
 

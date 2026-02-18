@@ -196,7 +196,7 @@ const Tasks = {
           </div>
           ${task.jiraKey || (task.source === 'ismart' && task.sourceRef) ? `
             <div class="task-links-row">
-              ${task.jiraKey ? `<a href="${escapeHtml(task.jiraUrl || '#')}" target="_blank" class="jira-inline-chip" onclick="event.stopPropagation()"><span class="jira-inline-key">${escapeHtml(task.jiraKey)}</span><span class="jira-chip-sep"></span><span class="jira-status-badge jira-status-${Tasks.jiraStatusCategory(task.jiraStatus)}" style="font-size:0.6rem;padding:0.05rem 0.3rem">${escapeHtml(task.jiraStatus || 'Unknown')}</span><span class="jira-chip-sep"></span><span class="jira-inline-meta">${escapeHtml(task.jiraAssignee || 'Unassigned')}</span></a>` : ''}
+              ${task.jiraKey ? `<a href="${escapeHtml(task.jiraUrl || '#')}" target="_blank" class="jira-inline-chip" onclick="event.stopPropagation()"><span class="jira-inline-key">${escapeHtml(task.jiraKey)}</span><span class="jira-chip-sep"></span><span class="jira-status-badge jira-status-${Tasks.jiraStatusCategory(task.jiraStatus)}" style="font-size:0.6rem;padding:0.05rem 0.3rem">${escapeHtml(task.jiraStatus || 'Unknown')}</span><span class="jira-chip-sep"></span><span class="jira-sprint-badge ${task.jiraSprint ? 'has-sprint' : 'no-sprint'}">${escapeHtml(task.jiraSprint || 'No Sprint')}</span><span class="jira-chip-sep"></span><span class="jira-inline-meta">${escapeHtml(task.jiraAssignee || 'Unassigned')}</span></a>` : ''}
               ${task.source === 'ismart' && task.sourceRef ? `<span class="ismart-ref-badge" title="iSmart ticket">${escapeHtml(task.sourceRef)}</span>` : ''}
             </div>
           ` : ''}
