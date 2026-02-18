@@ -264,6 +264,7 @@ body {
 .status-badge.down { background: rgba(244,63,94,0.12); color: #fb7185; border-color: rgba(244,63,94,0.2); }
 .status-badge.unknown { background: rgba(107,114,128,0.12); color: #9ca3af; border-color: rgba(107,114,128,0.2); }
 .status-badge.paused { background: rgba(245,158,11,0.12); color: #fbbf24; border-color: rgba(245,158,11,0.2); }
+.status-badge.degraded { background: rgba(245,158,11,0.12); color: #fbbf24; border-color: rgba(245,158,11,0.2); }
 
 .status-dot {
   width: 7px;
@@ -277,6 +278,7 @@ body {
 .status-dot.down { background: var(--color-down); box-shadow: 0 0 6px var(--color-down-glow); }
 .status-dot.unknown { background: var(--color-unknown); }
 .status-dot.paused { background: var(--color-paused); }
+.status-dot.degraded { background: #f59e0b; box-shadow: 0 0 6px rgba(245,158,11,0.25); }
 
 /* Pulsing animation for active status dots */
 .status-dot.up::after,
@@ -2278,4 +2280,31 @@ select.staging-cell-input {
   font-size: 0.78rem;
   color: var(--color-text-tertiary);
   padding-left: 1.6rem;
+}
+
+/* ─── Generic Monitor Cards ─────────────────────────────────────────────── */
+
+.monitor-card.status-degraded {
+  border-color: rgba(245, 158, 11, 0.15);
+}
+.monitor-card.status-degraded:hover {
+  border-color: rgba(245, 158, 11, 0.25);
+  box-shadow: 0 0 20px rgba(245, 158, 11, 0.08);
+}
+
+.card-env-info {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin-top: 0.35rem;
+}
+
+.env-tag {
+  display: inline-block;
+  font-size: 0.7rem;
+  padding: 0.15rem 0.5rem;
+  border-radius: 999px;
+  background: rgba(42, 157, 143, 0.1);
+  color: var(--color-primary);
+  border: 1px solid rgba(42, 157, 143, 0.15);
 }

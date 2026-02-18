@@ -140,6 +140,7 @@ async function runMigrations() {
     '011-add-jira-sprint.sql',
     '012-add-notification-prefs.sql',
     '013-add-sanity-checks.sql',
+    '014-add-generic-monitors.sql',
   ];
 
   for (const file of migrationFiles) {

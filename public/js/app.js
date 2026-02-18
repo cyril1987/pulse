@@ -64,8 +64,17 @@ function route() {
     clearInterval(SanityChecks.refreshTimer);
     SanityChecks.refreshTimer = null;
   }
+  if (typeof GenericDashboard !== 'undefined' && GenericDashboard.refreshTimer) {
+    clearInterval(GenericDashboard.refreshTimer);
+    GenericDashboard.refreshTimer = null;
+  }
 
-  if (hash === '/sanity-checks') {
+  if (hash === '/generic') {
+    GenericDashboard.render(app);
+  } else if (hash.match(/^\/generic\/\d+$/)) {
+    const id = hash.split('/')[2];
+    GenericMonitorDetail.render(app, id);
+  } else if (hash === '/sanity-checks') {
     SanityChecks.render(app);
   } else if (hash === '/sanity-checks/add') {
     SanityCheckForm.render(app);

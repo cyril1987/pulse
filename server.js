@@ -15,6 +15,8 @@ const settingsRouter = require('./src/routes/settings');
 const bulkRouter = require('./src/routes/bulk');
 const tasksRouter = require('./src/routes/tasks');
 const sanityChecksRouter = require('./src/routes/sanityChecks');
+const reportRouter = require('./src/routes/report');
+const genericMonitorsRouter = require('./src/routes/genericMonitors');
 
 const app = express();
 
@@ -68,6 +70,9 @@ app.use(authRouter);
 // Public health check (no auth required — for load balancers)
 app.use(healthRouter);
 
+// Public report ingestion — clients push monitoring data here (API key auth, not session)
+app.use('/report', reportRouter);
+
 // Protect all API routes
 app.use('/api', requireAuth);
 
@@ -77,6 +82,7 @@ app.use('/api', settingsRouter);
 app.use('/api', bulkRouter);
 app.use('/api/tasks', tasksRouter);
 app.use('/api/sanity-checks', sanityChecksRouter);
+app.use('/api/generic-monitors', genericMonitorsRouter);
 
 app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));

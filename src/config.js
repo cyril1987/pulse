@@ -44,4 +44,5 @@ module.exports = {
     apiToken: process.env.JIRA_API_TOKEN || '',
   },
   cronSecret: process.env.CRON_SECRET || '',
+  reportApiKey: process.env.REPORT_API_KEY || '',
 };
