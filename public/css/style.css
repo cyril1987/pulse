@@ -411,7 +411,9 @@ input[type="text"],
 input[type="url"],
 input[type="email"],
 input[type="number"],
-select {
+input[type="date"],
+select,
+textarea {
   width: 100%;
   padding: 0.7rem 0.85rem;
   border: 1px solid var(--color-card-border);
@@ -423,14 +425,36 @@ select {
   transition: all var(--transition);
 }
 
-input:focus, select:focus {
+textarea {
+  resize: vertical;
+  min-height: 5rem;
+}
+
+/* Dark-themed date picker */
+input[type="date"] {
+  color-scheme: dark;
+  cursor: pointer;
+}
+
+input[type="date"]::-webkit-calendar-picker-indicator {
+  filter: invert(0.7);
+  cursor: pointer;
+  opacity: 0.7;
+  transition: opacity 0.2s;
+}
+
+input[type="date"]::-webkit-calendar-picker-indicator:hover {
+  opacity: 1;
+}
+
+input:focus, select:focus, textarea:focus {
   outline: none;
   border-color: var(--color-primary);
   box-shadow: 0 0 0 3px var(--color-primary-glow);
   background: rgba(255, 255, 255, 0.05);
 }
 
-input::placeholder {
+input::placeholder, textarea::placeholder {
   color: var(--color-text-tertiary);
 }
 
