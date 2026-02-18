@@ -6,12 +6,12 @@ const SanityCheckForm = {
     let groups = [];
 
     try {
-      groups = await API.get('/api/sanity-checks/groups');
+      groups = await API.get('/sanity-checks/groups');
     } catch { /* ignore */ }
 
     if (editId) {
       try {
-        monitor = await API.get(`/api/sanity-checks/${editId}`);
+        monitor = await API.get(`/sanity-checks/${editId}`);
       } catch (err) {
         app.innerHTML = `<div class="error">Failed to load monitor: ${escapeHtml(err.message)}</div>`;
         return;
@@ -187,7 +187,7 @@ const SanityCheckForm = {
       btn.textContent = 'Discovering...';
       btn.disabled = true;
 
-      const checks = await API.get(`/api/sanity-checks/discover?clientUrl=${encodeURIComponent(clientUrl)}`);
+      const checks = await API.get(`/sanity-checks/discover?clientUrl=${encodeURIComponent(clientUrl)}`);
       this.discoveredChecks = checks;
 
       const container = document.getElementById('discovered-checks');
@@ -259,10 +259,10 @@ const SanityCheckForm = {
 
     try {
       if (isEdit) {
-        await API.put(`/api/sanity-checks/${editId}`, data);
+        await API.put(`/sanity-checks/${editId}`, data);
         location.hash = `#/sanity-checks/${editId}`;
       } else {
-        const result = await API.post('/api/sanity-checks', data);
+        const result = await API.post('/sanity-checks', data);
         location.hash = `#/sanity-checks/${result.id}`;
       }
     } catch (err) {

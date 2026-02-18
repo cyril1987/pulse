@@ -11,7 +11,7 @@ const SanityChecks = {
     }
 
     try {
-      const monitors = await API.get('/api/sanity-checks');
+      const monitors = await API.get('/sanity-checks');
       this.renderContent(app, monitors);
       this.refreshTimer = setInterval(() => this.render(app), 30000);
     } catch (err) {
@@ -126,12 +126,12 @@ const SanityChecks = {
   toggleGroup(group) {
     this.expandedGroups[group] = this.expandedGroups[group] === false;
     const app = document.getElementById('app');
-    API.get('/api/sanity-checks').then(monitors => this.renderContent(app, monitors));
+    API.get('/sanity-checks').then(monitors => this.renderContent(app, monitors));
   },
 
   async checkNow(id, app) {
     try {
-      await API.post(`/api/sanity-checks/${id}/check`);
+      await API.post(`/sanity-checks/${id}/check`);
       this.render(app);
     } catch (err) {
       Modal.alert('Check failed: ' + err.message);

@@ -4,8 +4,8 @@ const SanityCheckDetail = {
 
     try {
       const [monitor, results] = await Promise.all([
-        API.get(`/api/sanity-checks/${id}`),
-        API.get(`/api/sanity-checks/${id}/results?limit=50`),
+        API.get(`/sanity-checks/${id}`),
+        API.get(`/sanity-checks/${id}/results?limit=50`),
       ]);
 
       this.renderContent(app, monitor, results);
@@ -121,7 +121,7 @@ const SanityCheckDetail = {
 
   async runNow(id, app) {
     try {
-      await API.post(`/api/sanity-checks/${id}/check`);
+      await API.post(`/sanity-checks/${id}/check`);
       this.render(app, id);
     } catch (err) {
       Modal.alert('Check failed: ' + err.message);
@@ -130,7 +130,7 @@ const SanityCheckDetail = {
 
   async toggleActive(id, action, app) {
     try {
-      await API.post(`/api/sanity-checks/${id}/${action}`);
+      await API.post(`/sanity-checks/${id}/${action}`);
       this.render(app, id);
     } catch (err) {
       Modal.alert(`Failed to ${action}: ` + err.message);
@@ -140,7 +140,7 @@ const SanityCheckDetail = {
   async remove(id) {
     if (!confirm('Are you sure you want to delete this monitor? All results will be lost.')) return;
     try {
-      await API.delete(`/api/sanity-checks/${id}`);
+      await API.delete(`/sanity-checks/${id}`);
       location.hash = '#/sanity-checks';
     } catch (err) {
       Modal.alert('Failed to delete: ' + err.message);
