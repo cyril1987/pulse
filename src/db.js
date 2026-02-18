@@ -137,6 +137,7 @@ async function runMigrations() {
     '008-add-jira-integration.sql',
     '009-add-private-tasks.sql',
     '010-add-ismart-tickets.sql',
+    '011-add-jira-sprint.sql',
   ];
 
   for (const file of migrationFiles) {
