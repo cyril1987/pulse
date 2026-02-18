@@ -1,23 +1,6 @@
-const nodemailer = require('nodemailer');
+const { sendEmail } = require('./emailSender');
 const db = require('../db');
 const config = require('../config');
-
-let transporter;
-
-function getTransporter() {
-  if (!transporter) {
-    const opts = {
-      host: config.smtp.host,
-      port: config.smtp.port,
-      secure: config.smtp.secure,
-    };
-    if (config.smtp.user) {
-      opts.auth = { user: config.smtp.user, pass: config.smtp.pass };
-    }
-    transporter = nodemailer.createTransport(opts);
-  }
-  return transporter;
-}
 
 async function evaluateAndNotify(monitor, checkResult) {
   const previousStatus = monitor.current_status;
@@ -60,6 +43,20 @@ async function evaluateAndNotify(monitor, checkResult) {
   }
 }
 
+async function shouldNotifyMonitor(monitorEmail) {
+  // Monitor alerts go to the notify_email on the monitor, not necessarily a user.
+  // Look up user by email to check their preferences.
+  const user = await db.prepare('SELECT id FROM users WHERE email = ?').get(monitorEmail);
+  if (!user) return true; // External email — no prefs to check
+
+  const prefs = await db.prepare(
+    'SELECT monitor_alerts FROM user_notification_prefs WHERE user_id = ?'
+  ).get(user.id);
+
+  if (!prefs) return true; // No prefs row = defaults (enabled)
+  return !!prefs.monitor_alerts;
+}
+
 async function sendDownAlert(monitor, checkResult) {
   const recent = await db.prepare(`
     SELECT COUNT(*) as count FROM notifications
@@ -67,6 +64,8 @@ async function sendDownAlert(monitor, checkResult) {
     AND sent_at > datetime('now', '-15 minutes')
   `).get(monitor.id, 'down');
   if (recent.count > 0) return;
+
+  if (!(await shouldNotifyMonitor(monitor.notify_email))) return;
 
   const subject = `[DOWN] Monitor Alert: ${monitor.name} (${monitor.url})`;
   const text = [
@@ -81,12 +80,7 @@ async function sendDownAlert(monitor, checkResult) {
   ].join('\n');
 
   try {
-    await getTransporter().sendMail({
-      from: config.smtp.from,
-      to: monitor.notify_email,
-      subject,
-      text,
-    });
+    await sendEmail({ to: monitor.notify_email, subject, text });
     await db.prepare(`
       INSERT INTO notifications (monitor_id, type, email, details) VALUES (?, ?, ?, ?)
     `).run(
@@ -108,6 +102,8 @@ async function sendRecoveryAlert(monitor) {
     AND sent_at > datetime('now', '-15 minutes')
   `).get(monitor.id, 'recovery');
   if (recent.count > 0) return;
+
+  if (!(await shouldNotifyMonitor(monitor.notify_email))) return;
 
   let downtimeDuration = 'unknown';
   if (monitor.last_status_change_at) {
@@ -131,12 +127,7 @@ async function sendRecoveryAlert(monitor) {
   ].join('\n');
 
   try {
-    await getTransporter().sendMail({
-      from: config.smtp.from,
-      to: monitor.notify_email,
-      subject,
-      text,
-    });
+    await sendEmail({ to: monitor.notify_email, subject, text });
     await db.prepare(`
       INSERT INTO notifications (monitor_id, type, email, details) VALUES (?, ?, ?, ?)
     `).run(
@@ -151,26 +142,23 @@ async function sendRecoveryAlert(monitor) {
   }
 }
 
-module.exports = { evaluateAndNotify, sendTestEmail };
-
 async function sendTestEmail(toEmail) {
+  const { getProviderName } = require('./emailSender');
+  const provider = getProviderName();
+
   const subject = '[TEST] iConcile Pulse - Email Configuration Test';
   const text = [
     'This is a test email from iConcile Pulse.',
     '',
-    'If you are reading this, your SMTP configuration is working correctly.',
+    'If you are reading this, your email configuration is working correctly.',
     '',
-    `SMTP Host: ${config.smtp.host}`,
-    `SMTP Port: ${config.smtp.port}`,
+    `Provider: ${provider}`,
     `Sent At: ${new Date().toISOString()}`,
     '',
     '-- iConcile Pulse',
   ].join('\n');
 
-  await getTransporter().sendMail({
-    from: config.smtp.from,
-    to: toEmail,
-    subject,
-    text,
-  });
+  await sendEmail({ to: toEmail, subject, text });
 }
+
+module.exports = { evaluateAndNotify, sendTestEmail };

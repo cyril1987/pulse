@@ -1,28 +1,32 @@
-const nodemailer = require('nodemailer');
+const { sendEmail } = require('./emailSender');
 const db = require('../db');
-const config = require('../config');
 
-let transporter;
+// ─── Preference Check ────────────────────────────────────────────────────────
 
-function getTransporter() {
-  if (!transporter) {
-    const opts = {
-      host: config.smtp.host,
-      port: config.smtp.port,
-      secure: config.smtp.secure,
-    };
-    if (config.smtp.user) {
-      opts.auth = { user: config.smtp.user, pass: config.smtp.pass };
-    }
-    transporter = nodemailer.createTransport(opts);
+async function shouldNotify(userId, notificationType) {
+  if (!userId) return true; // No user context — send anyway
+
+  const prefs = await db.prepare(
+    'SELECT * FROM user_notification_prefs WHERE user_id = ?'
+  ).get(userId);
+
+  if (!prefs) return true; // No prefs row = use defaults (all enabled)
+
+  switch (notificationType) {
+    case 'assigned': return !!prefs.task_assigned;
+    case 'status_change': return !!prefs.task_status_change;
+    case 'due_soon': return !!prefs.task_due_soon;
+    case 'overdue': return !!prefs.task_overdue;
+    default: return true;
   }
-  return transporter;
 }
 
 // ─── Notify on task assignment ──────────────────────────────────────────────
 
 async function notifyAssignment(task, assignedUser, assignedByName) {
   if (!assignedUser || !assignedUser.email) return;
+
+  if (!(await shouldNotify(assignedUser.id, 'assigned'))) return;
 
   const recent = await db.prepare(`
     SELECT COUNT(*) AS count FROM task_notifications
@@ -45,12 +49,7 @@ async function notifyAssignment(task, assignedUser, assignedByName) {
   ].filter(Boolean).join('\n');
 
   try {
-    await getTransporter().sendMail({
-      from: config.smtp.from,
-      to: assignedUser.email,
-      subject,
-      text,
-    });
+    await sendEmail({ to: assignedUser.email, subject, text });
     await db.prepare(
       'INSERT INTO task_notifications (task_id, type, email, details) VALUES (?, ?, ?, ?)'
     ).run(task.id, 'assigned', assignedUser.email, JSON.stringify({ assignedBy: assignedByName }));
@@ -65,8 +64,10 @@ async function notifyAssignment(task, assignedUser, assignedByName) {
 async function notifyStatusChange(task, oldStatus, newStatus, changedByName) {
   if (!task.assigned_to) return;
 
-  const assignee = await db.prepare('SELECT email, name FROM users WHERE id = ?').get(task.assigned_to);
+  const assignee = await db.prepare('SELECT id, email, name FROM users WHERE id = ?').get(task.assigned_to);
   if (!assignee) return;
+
+  if (!(await shouldNotify(assignee.id, 'status_change'))) return;
 
   const recent = await db.prepare(`
     SELECT COUNT(*) AS count FROM task_notifications
@@ -87,12 +88,7 @@ async function notifyStatusChange(task, oldStatus, newStatus, changedByName) {
   ].join('\n');
 
   try {
-    await getTransporter().sendMail({
-      from: config.smtp.from,
-      to: assignee.email,
-      subject,
-      text,
-    });
+    await sendEmail({ to: assignee.email, subject, text });
     await db.prepare(
       'INSERT INTO task_notifications (task_id, type, email, details) VALUES (?, ?, ?, ?)'
     ).run(task.id, 'status_change', assignee.email, JSON.stringify({ oldStatus, newStatus, changedBy: changedByName }));
@@ -123,6 +119,8 @@ async function checkDueSoonTasks() {
   `).all();
 
   for (const task of tasks) {
+    if (!(await shouldNotify(task.assigned_to, 'due_soon'))) continue;
+
     const recent = await db.prepare(`
       SELECT COUNT(*) AS count FROM task_notifications
       WHERE task_id = ? AND type = ?
@@ -143,12 +141,7 @@ async function checkDueSoonTasks() {
     ].join('\n');
 
     try {
-      await getTransporter().sendMail({
-        from: config.smtp.from,
-        to: task.user_email,
-        subject,
-        text,
-      });
+      await sendEmail({ to: task.user_email, subject, text });
       await db.prepare(
         'INSERT INTO task_notifications (task_id, type, email, details) VALUES (?, ?, ?, ?)'
       ).run(task.id, 'due_soon', task.user_email, JSON.stringify({ dueDate: task.due_date }));
@@ -179,6 +172,8 @@ async function checkOverdueTasks() {
   `).all();
 
   for (const task of tasks) {
+    if (!(await shouldNotify(task.assigned_to, 'overdue'))) continue;
+
     const recent = await db.prepare(`
       SELECT COUNT(*) AS count FROM task_notifications
       WHERE task_id = ? AND type = ?
@@ -199,12 +194,7 @@ async function checkOverdueTasks() {
     ].join('\n');
 
     try {
-      await getTransporter().sendMail({
-        from: config.smtp.from,
-        to: task.user_email,
-        subject,
-        text,
-      });
+      await sendEmail({ to: task.user_email, subject, text });
       await db.prepare(
         'INSERT INTO task_notifications (task_id, type, email, details) VALUES (?, ?, ?, ?)'
       ).run(task.id, 'overdue', task.user_email, JSON.stringify({ dueDate: task.due_date }));

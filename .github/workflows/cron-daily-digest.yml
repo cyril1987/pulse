@@ -1,0 +1,16 @@
+name: Daily Digest Email
+
+on:
+  schedule:
+    - cron: '30 2 * * *'   # 02:30 UTC = 08:00 IST
+  workflow_dispatch:         # Allow manual trigger
+
+jobs:
+  daily-digest:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger daily digest
+        run: |
+          curl --fail --silent --show-error \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
+            https://iconcile-pulse.vercel.app/api/cron/daily-digest

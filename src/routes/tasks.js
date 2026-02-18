@@ -3,6 +3,7 @@ const router = express.Router();
 const db = require('../db');
 const { validateTask } = require('../middleware/validateTask');
 const jiraService = require('../services/jiraService');
+const { notifyAssignment, notifyStatusChange } = require('../services/taskNotifier');
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -497,6 +498,16 @@ router.post('/', validateTask, async (req, res) => {
     WHERE t.id = ?
   `).get(taskId);
 
+  // Fire-and-forget: notify assignee (don't block response)
+  if (assignedTo && parseInt(assignedTo, 10) !== req.user.id) {
+    const assignedUser = await db.prepare('SELECT id, email, name FROM users WHERE id = ?')
+      .get(parseInt(assignedTo, 10));
+    const freshTask = await db.prepare('SELECT * FROM tasks WHERE id = ?').get(taskId);
+    notifyAssignment(freshTask, assignedUser, req.user.name).catch(err => {
+      console.error('[TASK-NOTIFY] Assignment notification error:', err.message);
+    });
+  }
+
   res.status(201).json(formatTask(task));
 });
 
@@ -561,6 +572,17 @@ router.put('/:id', validateTask, async (req, res) => {
       ).run(existing.id, req.user.id, msg);
     }
   });
+
+  // Fire-and-forget: notify new assignee on reassignment
+  const newAssignedTo = assignedTo ? parseInt(assignedTo, 10) : null;
+  if (newAssignedTo && newAssignedTo !== existing.assigned_to && newAssignedTo !== req.user.id) {
+    const assignedUser = await db.prepare('SELECT id, email, name FROM users WHERE id = ?')
+      .get(newAssignedTo);
+    const freshTask = await db.prepare('SELECT * FROM tasks WHERE id = ?').get(req.params.id);
+    notifyAssignment(freshTask, assignedUser, req.user.name).catch(err => {
+      console.error('[TASK-NOTIFY] Assignment notification error:', err.message);
+    });
+  }
 
   const task = await db.prepare(`
     SELECT t.*,
@@ -654,6 +676,11 @@ router.post('/:id/transition', async (req, res) => {
       req.user.id,
       `${req.user.name} changed status from ${oldLabel} to ${newLabel}`
     );
+  });
+
+  // Fire-and-forget: notify assignee about status change
+  notifyStatusChange(existing, existing.status, status, req.user.name).catch(err => {
+    console.error('[TASK-NOTIFY] Status change notification error:', err.message);
   });
 
   const task = await db.prepare(`

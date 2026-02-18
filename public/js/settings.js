@@ -5,12 +5,16 @@ const Settings = {
     container.innerHTML = '<div class="loading">Loading settings...</div>';
 
     try {
-      const [smtp, health, jira] = await Promise.all([
-        API.get('/settings/smtp'),
+      const [emailConfig, health, jira, notifPrefs] = await Promise.all([
+        API.get('/settings/email').catch(() => ({ configured: false, provider: 'SMTP' })),
         Settings.fetchHealth(),
         API.get('/settings/jira').catch(() => ({ configured: false, baseUrl: '(not set)', userEmail: '(not set)' })),
+        API.get('/settings/notification-prefs').catch(() => ({
+          monitorAlerts: true, taskAssigned: true, taskStatusChange: true,
+          taskDueSoon: true, taskOverdue: true, dailyDigest: false,
+        })),
       ]);
-      Settings.renderLayout(container, smtp, health, jira);
+      Settings.renderLayout(container, emailConfig, health, jira, notifPrefs);
     } catch (err) {
       container.innerHTML = `<div class="empty-state"><h2>Error</h2><p>${err.message}</p></div>`;
     }
@@ -26,9 +30,10 @@ const Settings = {
     }
   },
 
-  renderLayout(container, smtp, health, jira) {
+  renderLayout(container, emailConfig, health, jira, notifPrefs) {
     const isHealth = Settings.currentTab === 'health';
-    const isSmtp = Settings.currentTab === 'smtp';
+    const isEmail = Settings.currentTab === 'email';
+    const isNotifications = Settings.currentTab === 'notifications';
     const isJira = Settings.currentTab === 'jira';
 
     container.innerHTML = `
@@ -36,7 +41,8 @@ const Settings = {
         <aside class="settings-sidebar">
           <nav class="settings-sidebar-nav">
             <a href="javascript:void(0)" data-tab="health" class="${isHealth ? 'active' : ''}">API Health</a>
-            <a href="javascript:void(0)" data-tab="smtp" class="${isSmtp ? 'active' : ''}">SMTP Configuration</a>
+            <a href="javascript:void(0)" data-tab="email" class="${isEmail ? 'active' : ''}">Email Configuration</a>
+            <a href="javascript:void(0)" data-tab="notifications" class="${isNotifications ? 'active' : ''}">Notifications</a>
             <a href="javascript:void(0)" data-tab="jira" class="${isJira ? 'active' : ''}">Jira Integration</a>
           </nav>
         </aside>
@@ -50,20 +56,22 @@ const Settings = {
         Settings.currentTab = link.dataset.tab;
         container.querySelectorAll('.settings-sidebar-nav a').forEach(l => l.classList.remove('active'));
         link.classList.add('active');
-        Settings.renderPanel(document.getElementById('settings-panel'), smtp, health, jira);
+        Settings.renderPanel(document.getElementById('settings-panel'), emailConfig, health, jira, notifPrefs);
       });
     });
 
-    Settings.renderPanel(document.getElementById('settings-panel'), smtp, health, jira);
+    Settings.renderPanel(document.getElementById('settings-panel'), emailConfig, health, jira, notifPrefs);
   },
 
-  renderPanel(panel, smtp, health, jira) {
+  renderPanel(panel, emailConfig, health, jira, notifPrefs) {
     if (Settings.currentTab === 'health') {
       Settings.renderHealthPanel(panel, health);
+    } else if (Settings.currentTab === 'email') {
+      Settings.renderEmailPanel(panel, emailConfig);
+    } else if (Settings.currentTab === 'notifications') {
+      Settings.renderNotificationsPanel(panel, notifPrefs);
     } else if (Settings.currentTab === 'jira') {
       Settings.renderJiraPanel(panel, jira);
-    } else {
-      Settings.renderSmtpPanel(panel, smtp);
     }
   },
 
@@ -211,42 +219,61 @@ const Settings = {
     return parts.join(' &bull; ');
   },
 
-  // ---- SMTP Configuration Panel ----
+  // ---- Email Configuration Panel ----
 
-  renderSmtpPanel(panel, smtp) {
-    const statusColor = smtp.configured ? 'var(--color-up)' : 'var(--color-down)';
-    const statusText = smtp.configured ? 'Configured' : 'Not Configured';
+  renderEmailPanel(panel, emailConfig) {
+    const statusColor = emailConfig.configured ? 'var(--color-up)' : 'var(--color-down)';
+    const statusText = emailConfig.configured ? 'Configured' : 'Not Configured';
+    const isSendGrid = emailConfig.provider === 'SendGrid';
+    const providerBadge = isSendGrid
+      ? '<span style="background:#1A82E2;color:white;padding:0.15rem 0.5rem;border-radius:4px;font-size:0.7rem;font-weight:600">SendGrid</span>'
+      : '<span style="background:#6b7280;color:white;padding:0.15rem 0.5rem;border-radius:4px;font-size:0.7rem;font-weight:600">SMTP</span>';
 
     panel.innerHTML = `
       <div style="margin-bottom:2rem">
-        <h2 style="font-size:1.3rem;font-weight:700;margin-bottom:1.5rem;letter-spacing:-0.02em">SMTP Configuration</h2>
+        <h2 style="font-size:1.3rem;font-weight:700;margin-bottom:1.5rem;letter-spacing:-0.02em">
+          Email Configuration ${providerBadge}
+        </h2>
         <div class="stats-grid" style="margin-bottom:1rem">
           <div class="stat-card">
             <div class="stat-label">Status</div>
             <div class="stat-value" style="font-size:1rem;color:${statusColor}">${statusText}</div>
           </div>
           <div class="stat-card">
-            <div class="stat-label">Host</div>
-            <div class="stat-value" style="font-size:0.85rem;word-break:break-all">${escapeHtml(smtp.host)}</div>
+            <div class="stat-label">Provider</div>
+            <div class="stat-value" style="font-size:1rem">${escapeHtml(emailConfig.provider)}</div>
           </div>
+          ${isSendGrid ? `
+            <div class="stat-card">
+              <div class="stat-label">API Key</div>
+              <div class="stat-value" style="font-size:0.85rem">${escapeHtml(emailConfig.apiKeyPreview || '(not set)')}</div>
+            </div>
+          ` : `
+            <div class="stat-card">
+              <div class="stat-label">Host</div>
+              <div class="stat-value" style="font-size:0.85rem;word-break:break-all">${escapeHtml(emailConfig.host || '(not set)')}</div>
+            </div>
+          `}
           <div class="stat-card">
-            <div class="stat-label">Port</div>
-            <div class="stat-value" style="font-size:1rem">${smtp.port}</div>
-          </div>
-          <div class="stat-card">
-            <div class="stat-label">User</div>
-            <div class="stat-value" style="font-size:0.85rem">${escapeHtml(smtp.user)}</div>
+            <div class="stat-label">${isSendGrid ? 'From' : 'Port'}</div>
+            <div class="stat-value" style="font-size:0.85rem">${isSendGrid ? escapeHtml(emailConfig.from || '') : (emailConfig.port || '--')}</div>
           </div>
         </div>
         <div style="font-size:0.78rem;color:var(--color-text-tertiary)">
-          From: ${escapeHtml(smtp.from)} &bull; Secure: ${smtp.secure ? 'Yes' : 'No'}
+          From: ${escapeHtml(emailConfig.from || '')}
+          ${!isSendGrid ? ` &bull; User: ${escapeHtml(emailConfig.user || '(not set)')} &bull; Secure: ${emailConfig.secure ? 'Yes' : 'No'}` : ''}
+        </div>
+        <div style="font-size:0.78rem;color:var(--color-text-tertiary);margin-top:0.5rem">
+          ${isSendGrid
+            ? 'Configure via <code>SENDGRID_API_KEY</code> and <code>EMAIL_FROM</code> environment variables.'
+            : 'Configure via <code>SMTP_HOST</code>, <code>SMTP_PORT</code>, <code>SMTP_USER</code>, <code>SMTP_PASS</code>, <code>SMTP_FROM</code> environment variables. Or set <code>SENDGRID_API_KEY</code> to switch to SendGrid.'}
         </div>
       </div>
 
       <div style="border-top:1px solid var(--color-border);padding-top:1.5rem">
         <h3 style="font-size:0.95rem;font-weight:600;margin-bottom:0.5rem;color:var(--color-text-secondary)">Test Email</h3>
         <p style="font-size:0.82rem;color:var(--color-text-tertiary);margin-bottom:1rem">
-          Send a test email to verify your SMTP configuration is working correctly.
+          Send a test email to verify your ${escapeHtml(emailConfig.provider)} configuration is working correctly.
         </p>
         <div id="test-email-result"></div>
         <form id="test-email-form" style="display:flex;gap:0.75rem;align-items:flex-start">
@@ -277,7 +304,7 @@ const Settings = {
         const result = await API.post('/settings/test-email', { email });
         resultEl.innerHTML = `
           <div style="background:rgba(16,185,129,0.08);border:1px solid rgba(16,185,129,0.2);border-radius:var(--radius-sm);padding:0.75rem 1rem;margin-bottom:1rem;font-size:0.85rem;color:#34d399">
-            Test email sent successfully to <strong>${escapeHtml(email)}</strong>. Check your inbox (or Mailtrap dashboard).
+            Test email sent successfully to <strong>${escapeHtml(email)}</strong>.
           </div>
         `;
         btn.textContent = 'Sent!';
@@ -295,6 +322,79 @@ const Settings = {
         `;
         btn.disabled = false;
         btn.textContent = 'Send Test Email';
+      }
+    });
+  },
+
+  // ---- Notifications Panel ----
+
+  renderNotificationsPanel(panel, prefs) {
+    const types = [
+      { key: 'monitorAlerts', label: 'Monitor Alerts', desc: 'Get notified when a URL monitor goes down or recovers' },
+      { key: 'taskAssigned', label: 'Task Assignment', desc: 'Get notified when a task is assigned to you' },
+      { key: 'taskStatusChange', label: 'Task Status Changes', desc: 'Get notified when a task assigned to you changes status' },
+      { key: 'taskDueSoon', label: 'Due Soon Reminders', desc: 'Get notified when your task is due within 24 hours' },
+      { key: 'taskOverdue', label: 'Overdue Alerts', desc: 'Get notified when your task is past its due date' },
+      { key: 'dailyDigest', label: 'Daily Digest', desc: 'Receive a daily summary of your open tasks at 8:00 AM IST' },
+    ];
+
+    panel.innerHTML = `
+      <div style="margin-bottom:2rem">
+        <h2 style="font-size:1.3rem;font-weight:700;margin-bottom:0.5rem;letter-spacing:-0.02em">Notification Preferences</h2>
+        <p style="font-size:0.82rem;color:var(--color-text-tertiary);margin-bottom:1.5rem">
+          Choose which email notifications you want to receive. Changes are saved per user.
+        </p>
+        <div id="notif-prefs-form">
+          ${types.map(t => `
+            <div class="notif-pref-row">
+              <label class="notif-pref-label">
+                <input type="checkbox" data-key="${t.key}" ${prefs[t.key] ? 'checked' : ''}>
+                <strong>${t.label}</strong>
+              </label>
+              <p class="notif-pref-desc">${t.desc}</p>
+            </div>
+          `).join('')}
+        </div>
+        <div id="notif-prefs-result" style="margin-top:1rem"></div>
+        <button class="btn btn-primary" id="save-notif-prefs" style="margin-top:1rem">Save Preferences</button>
+      </div>
+    `;
+
+    document.getElementById('save-notif-prefs').addEventListener('click', async () => {
+      const btn = document.getElementById('save-notif-prefs');
+      const resultEl = document.getElementById('notif-prefs-result');
+      const body = {};
+
+      panel.querySelectorAll('[data-key]').forEach(cb => {
+        body[cb.dataset.key] = cb.checked;
+      });
+
+      btn.disabled = true;
+      btn.textContent = 'Saving...';
+      resultEl.innerHTML = '';
+
+      try {
+        await API.put('/settings/notification-prefs', body);
+        resultEl.innerHTML = `
+          <div style="background:rgba(16,185,129,0.08);border:1px solid rgba(16,185,129,0.2);border-radius:var(--radius-sm);padding:0.75rem 1rem;font-size:0.85rem;color:#34d399">
+            Notification preferences saved successfully.
+          </div>
+        `;
+        btn.textContent = 'Saved!';
+        setTimeout(() => {
+          btn.disabled = false;
+          btn.textContent = 'Save Preferences';
+          resultEl.innerHTML = '';
+        }, 3000);
+      } catch (err) {
+        resultEl.innerHTML = `
+          <div class="form-errors">
+            <strong>Failed to save preferences</strong><br>
+            ${escapeHtml(err.message)}
+          </div>
+        `;
+        btn.disabled = false;
+        btn.textContent = 'Save Preferences';
       }
     });
   },
