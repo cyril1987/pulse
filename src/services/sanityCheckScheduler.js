@@ -134,8 +134,8 @@ async function processResult(clientUrl, result) {
       await db.prepare('UPDATE sanity_check_monitors SET query = ? WHERE id = ?').run(result.query, monitor.id);
     }
 
-    // Alert on status transition OR value change
-    if (status !== previousStatus || valueChanged) {
+    // Ensure tasks exist for failing checks, and notify on status/value changes
+    if (status === 'fail' || status !== previousStatus || valueChanged) {
       await evaluateAndNotify(monitor, {
         code: result.code,
         status,
@@ -185,9 +185,8 @@ function evaluate(checkType, actualValue, expectedMin, expectedMax) {
 async function evaluateAndNotify(monitor, result) {
   const { code, status, previousStatus, actualValue, previousValue, executionTimeMs, errorMessage } = result;
 
-  // On transition to fail: create task + send email
-  if (status === 'fail' && previousStatus !== 'fail') {
-    // Create a task — find a valid created_by user
+  // For any failing check: ensure a task exists (not just on transition)
+  if (status === 'fail') {
     try {
       const priority = mapSeverityToPriority(monitor.severity);
       let createdBy = monitor.created_by;
@@ -225,8 +224,8 @@ async function evaluateAndNotify(monitor, result) {
       console.error(`[SANITY-CHECK] Failed to create task for ${code}:`, err.message);
     }
 
-    // Send email notification (rate-limited)
-    if (monitor.notify_email) {
+    // Send email notification on first transition to fail (rate-limited)
+    if (previousStatus !== 'fail' && monitor.notify_email) {
       const notifKey = `${monitor.id}_fail`;
       const now = Date.now();
       if (!lastNotification[notifKey] || now - lastNotification[notifKey] > 900000) {
