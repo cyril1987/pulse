@@ -2786,6 +2786,181 @@ select.staging-cell-input {
   line-height: 1;
 }
 
+/* ─── Environment Sections (dc-env-*) ─────────────────────────────────────── */
+
+.dc-env-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.dc-env-section {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  background: var(--color-bg-card);
+  transition: border-color 0.2s;
+}
+
+.dc-env-border-fail {
+  border-color: var(--color-down, #ef4444);
+  border-left: 3px solid var(--color-down, #ef4444);
+}
+
+.dc-env-border-error {
+  border-color: var(--color-stale, #f59e0b);
+  border-left: 3px solid var(--color-stale, #f59e0b);
+}
+
+.dc-env-border-pass {
+  border-color: var(--color-up, #10b981);
+  border-left: 3px solid var(--color-up, #10b981);
+}
+
+.dc-env-header {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  width: 100%;
+  padding: 0.75rem 1rem;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 0.88rem;
+  color: var(--color-text);
+  text-align: left;
+  transition: background 0.15s;
+}
+
+.dc-env-header:hover {
+  background: rgba(255,255,255,0.03);
+}
+
+.dc-env-toggle {
+  font-size: 0.7rem;
+  color: var(--color-text-tertiary);
+  width: 1rem;
+  flex-shrink: 0;
+}
+
+.dc-env-health {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.dc-env-health-fail {
+  background: var(--color-down, #ef4444);
+  animation: pulse-dot 2s infinite;
+}
+
+.dc-env-health-error {
+  background: var(--color-stale, #f59e0b);
+}
+
+.dc-env-health-pass {
+  background: var(--color-up, #10b981);
+}
+
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+.dc-env-name {
+  font-weight: 700;
+  font-size: 0.92rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.dc-env-url {
+  font-size: 0.7rem;
+  font-family: 'SF Mono', 'Fira Code', monospace;
+  color: var(--color-text-tertiary);
+  background: rgba(255,255,255,0.04);
+  padding: 0.15rem 0.4rem;
+  border-radius: 4px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 260px;
+}
+
+.dc-env-badges {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
+.dc-env-run-all {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--color-primary, #6366f1);
+  background: rgba(99, 102, 241, 0.1);
+  border: none;
+  border-radius: 4px;
+  padding: 0.25rem 0.55rem;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.15s;
+  flex-shrink: 0;
+}
+
+.dc-env-run-all:hover {
+  background: rgba(99, 102, 241, 0.2);
+}
+
+.dc-env-body {
+  padding: 0 0.5rem 0.5rem;
+  border-top: 1px solid var(--color-border);
+}
+
+.dc-env-toggle-all {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--color-text-secondary);
+  background: transparent;
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+  padding: 0.3rem 0.7rem;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.15s, color 0.15s;
+}
+
+.dc-env-toggle-all:hover {
+  background: rgba(255,255,255,0.06);
+  color: var(--color-text);
+}
+
+/* Responsive: stack env header items on mobile */
+@media (max-width: 640px) {
+  .dc-env-header {
+    flex-wrap: wrap;
+    gap: 0.4rem;
+  }
+
+  .dc-env-url {
+    max-width: 100%;
+    order: 10;
+    flex-basis: 100%;
+    margin-top: 0.1rem;
+  }
+
+  .dc-env-badges {
+    margin-left: 0;
+    order: 9;
+    flex-basis: 100%;
+    margin-top: 0.2rem;
+  }
+}
+
 /* ═══════════════════════════════════════════════════════════════════════════
    Data Check Detail (dcd-*)
    ═══════════════════════════════════════════════════════════════════════════ */

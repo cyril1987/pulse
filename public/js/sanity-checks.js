@@ -1,8 +1,43 @@
 const SanityChecks = {
   refreshTimer: null,
   expandedGroups: {},
+  expandedEnvironments: {},
   filterStatus: 'failing', // default: show what needs attention
   sortBy: 'value-desc',
+
+  // ─── Environment utilities ──────────────────────────────────────────────────
+
+  extractEnvKey(clientUrl) {
+    if (!clientUrl) return '_unknown_';
+    try {
+      return new URL(clientUrl).origin + new URL(clientUrl).pathname.replace(/\/+$/, '');
+    } catch {
+      return clientUrl;
+    }
+  },
+
+  extractEnvName(clientUrl) {
+    if (!clientUrl) return 'Unknown';
+    try {
+      const hostname = new URL(clientUrl).hostname;
+      // "dev.iconcile.com" → "DEV", "demo.iconcile.com" → "DEMO"
+      const sub = hostname.split('.')[0];
+      if (sub && sub !== 'www') return sub.toUpperCase();
+      return hostname.toUpperCase();
+    } catch {
+      return clientUrl;
+    }
+  },
+
+  groupByEnvironment(monitors) {
+    const groups = {};
+    for (const m of monitors) {
+      const key = this.extractEnvKey(m.clientUrl);
+      if (!groups[key]) groups[key] = [];
+      groups[key].push(m);
+    }
+    return groups;
+  },
 
   async render(app) {
     app.innerHTML = '<div class="loading">Loading data checks...</div>';
@@ -53,17 +88,24 @@ const SanityChecks = {
     // Calculate totals for the headline
     const totalExceptionValue = failing.reduce((sum, m) => sum + (parseFloat(m.lastValue) || 0), 0);
 
+    // Detect multi-environment
+    const allByEnv = this.groupByEnvironment(monitors);
+    const envCount = Object.keys(allByEnv).length;
+    const isMultiEnv = envCount > 1;
+
     app.innerHTML = `
       <div class="dc-layout">
         ${this.renderTopBar(total, failing.length, passing.length, errored.length + neverChecked.length, totalExceptionValue)}
-        ${this.renderToolbar(filtered.length)}
+        ${this.renderToolbar(filtered.length, isMultiEnv)}
         ${filtered.length > 0
-          ? this.renderExceptionsList(filtered)
+          ? (isMultiEnv
+              ? this.renderEnvironmentSections(filtered, monitors)
+              : this.renderExceptionsList(filtered))
           : this.renderEmptyState()}
       </div>
     `;
 
-    this.bindEvents(app);
+    this.bindEvents(app, isMultiEnv);
   },
 
   renderTopBar(total, failCount, passCount, errorCount, totalExceptions) {
@@ -100,16 +142,24 @@ const SanityChecks = {
     `;
   },
 
-  renderToolbar(count) {
+  renderToolbar(count, isMultiEnv) {
     const label = this.filterStatus === 'failing' ? 'exceptions needing action'
                 : this.filterStatus === 'passing' ? 'checks clear'
                 : this.filterStatus === 'error' ? 'checks with errors'
                 : 'total checks';
 
+    // Check if all envs are expanded or collapsed
+    const allExpanded = isMultiEnv && Object.values(this.expandedEnvironments).every(v => v !== false);
+
     return `
       <div class="dc-toolbar">
         <span class="dc-toolbar-count">${count} ${label}</span>
         <div class="dc-toolbar-right">
+          ${isMultiEnv ? `
+            <button class="dc-env-toggle-all" id="dc-env-toggle-all" title="${allExpanded ? 'Collapse all environments' : 'Expand all environments'}">
+              ${allExpanded ? '&#9660; Collapse All' : '&#9654; Expand All'}
+            </button>
+          ` : ''}
           <select class="dc-sort-select" id="dc-sort">
             <option value="value-desc" ${this.sortBy === 'value-desc' ? 'selected' : ''}>Highest value first</option>
             <option value="value-asc" ${this.sortBy === 'value-asc' ? 'selected' : ''}>Lowest value first</option>
@@ -119,6 +169,83 @@ const SanityChecks = {
             <option value="group" ${this.sortBy === 'group' ? 'selected' : ''}>Group</option>
           </select>
         </div>
+      </div>
+    `;
+  },
+
+  renderEnvironmentSections(filtered, allMonitors) {
+    const filteredByEnv = this.groupByEnvironment(filtered);
+    const allByEnv = this.groupByEnvironment(allMonitors);
+
+    // Sort environments: those with failures first, then alphabetical
+    const envKeys = Object.keys(allByEnv).sort((a, b) => {
+      const aFails = (allByEnv[a] || []).filter(m => m.currentStatus === 'fail').length;
+      const bFails = (allByEnv[b] || []).filter(m => m.currentStatus === 'fail').length;
+      if (aFails > 0 && bFails === 0) return -1;
+      if (bFails > 0 && aFails === 0) return 1;
+      return this.extractEnvName(a).localeCompare(this.extractEnvName(b));
+    });
+
+    // Smart defaults: auto-expand envs with failures, collapse healthy ones
+    // If nothing is failing anywhere, expand all
+    const anyFailing = allMonitors.some(m => m.currentStatus === 'fail');
+    for (const key of envKeys) {
+      if (this.expandedEnvironments[key] === undefined) {
+        if (!anyFailing) {
+          this.expandedEnvironments[key] = true;
+        } else {
+          const envFails = (allByEnv[key] || []).some(m => m.currentStatus === 'fail');
+          this.expandedEnvironments[key] = envFails;
+        }
+      }
+    }
+
+    // Only render env sections that have filtered monitors (or all if showing totals)
+    const sectionsHtml = envKeys.map(envKey => {
+      const envFiltered = filteredByEnv[envKey] || [];
+      const envAll = allByEnv[envKey] || [];
+      // Skip env sections with 0 filtered monitors
+      if (envFiltered.length === 0) return '';
+      return this.renderEnvironmentSection(envKey, envFiltered, envAll);
+    }).join('');
+
+    return `<div class="dc-env-list">${sectionsHtml}</div>`;
+  },
+
+  renderEnvironmentSection(envKey, filteredMonitors, allEnvMonitors) {
+    const envName = this.extractEnvName(envKey);
+    const isExpanded = this.expandedEnvironments[envKey] !== false;
+
+    // Stats from ALL monitors in this env (not just filtered)
+    const failCount = allEnvMonitors.filter(m => m.currentStatus === 'fail').length;
+    const passCount = allEnvMonitors.filter(m => m.currentStatus === 'pass').length;
+    const errorCount = allEnvMonitors.filter(m => m.currentStatus === 'error' || m.currentStatus === 'unknown' || !m.lastCheckedAt).length;
+    const totalCount = allEnvMonitors.length;
+
+    // Health: red if any fail, amber if any error, green otherwise
+    const healthClass = failCount > 0 ? 'dc-env-health-fail' : errorCount > 0 ? 'dc-env-health-error' : 'dc-env-health-pass';
+    const borderClass = failCount > 0 ? 'dc-env-border-fail' : errorCount > 0 ? 'dc-env-border-error' : 'dc-env-border-pass';
+
+    return `
+      <div class="dc-env-section ${borderClass}">
+        <button class="dc-env-header" data-env-key="${escapeHtml(envKey)}">
+          <span class="dc-env-toggle">${isExpanded ? '&#9660;' : '&#9654;'}</span>
+          <span class="dc-env-health ${healthClass}"></span>
+          <span class="dc-env-name">${escapeHtml(envName)}</span>
+          <span class="dc-env-url">${escapeHtml(envKey)}</span>
+          <span class="dc-env-badges">
+            ${failCount > 0 ? `<span class="dc-badge dc-badge-fail">${failCount} failing</span>` : ''}
+            ${passCount > 0 ? `<span class="dc-badge dc-badge-pass">${passCount} clear</span>` : ''}
+            ${errorCount > 0 ? `<span class="dc-badge dc-badge-error">${errorCount} error</span>` : ''}
+            <span class="dc-badge">${totalCount} total</span>
+          </span>
+          <span class="dc-env-run-all" data-env-url="${escapeHtml(envKey)}" title="Run all checks for ${escapeHtml(envName)}">&#9654; Run</span>
+        </button>
+        ${isExpanded ? `
+          <div class="dc-env-body">
+            ${this.renderExceptionsList(filteredMonitors)}
+          </div>
+        ` : ''}
       </div>
     `;
   },
@@ -262,7 +389,7 @@ const SanityChecks = {
     }
   },
 
-  bindEvents(app) {
+  bindEvents(app, isMultiEnv) {
     // Filter cards
     app.querySelectorAll('[data-filter]').forEach(el => {
       el.addEventListener('click', (e) => {
@@ -309,6 +436,39 @@ const SanityChecks = {
         this.render(app);
       });
     });
+
+    // Environment header toggles
+    app.querySelectorAll('.dc-env-header').forEach(header => {
+      header.addEventListener('click', (e) => {
+        // Don't toggle if clicking the "Run" button
+        if (e.target.closest('.dc-env-run-all')) return;
+        const envKey = header.dataset.envKey;
+        this.expandedEnvironments[envKey] = !this.expandedEnvironments[envKey];
+        this.render(app);
+      });
+    });
+
+    // Per-environment "Run" buttons
+    app.querySelectorAll('.dc-env-run-all').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        this.runAllForEnv(btn.dataset.envUrl, app);
+      });
+    });
+
+    // Collapse/Expand All environments toggle
+    const toggleAllBtn = document.getElementById('dc-env-toggle-all');
+    if (toggleAllBtn) {
+      toggleAllBtn.addEventListener('click', () => {
+        const allExpanded = Object.values(this.expandedEnvironments).every(v => v !== false);
+        const newState = !allExpanded;
+        for (const key of Object.keys(this.expandedEnvironments)) {
+          this.expandedEnvironments[key] = newState;
+        }
+        this.render(app);
+      });
+    }
   },
 
   async syncFromClient(app) {
@@ -354,6 +514,28 @@ const SanityChecks = {
     } catch (err) {
       if (btn) { btn.disabled = false; btn.textContent = 'Run All'; }
       Modal.alert('Run all failed: ' + err.message);
+    }
+  },
+
+  async runAllForEnv(envUrl, app) {
+    // Find the button and disable it
+    const btn = app.querySelector(`.dc-env-run-all[data-env-url="${CSS.escape(envUrl)}"]`);
+    if (btn) { btn.textContent = 'Running...'; btn.style.pointerEvents = 'none'; }
+
+    try {
+      const monitors = await API.get('/sanity-checks');
+      const envMonitors = monitors.filter(m => this.extractEnvKey(m.clientUrl) === envUrl && m.isActive);
+
+      for (const m of envMonitors) {
+        try {
+          await API.post(`/sanity-checks/${m.id}/check`);
+        } catch { /* continue */ }
+      }
+
+      this.render(app);
+    } catch (err) {
+      if (btn) { btn.textContent = '\u25B6 Run'; btn.style.pointerEvents = ''; }
+      Modal.alert('Run failed: ' + err.message);
     }
   },
 
