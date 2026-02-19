@@ -116,7 +116,7 @@ const SanityChecks = {
           <div class="dc-headline-actions">
             <button class="btn btn-secondary btn-sm" id="btn-sync-client">Sync from Client</button>
             <button class="btn btn-secondary btn-sm" id="btn-run-all">Run All</button>
-            <a href="#/sanity-checks/add" class="btn btn-primary btn-sm">+ Add Check</a>
+            <button class="btn btn-primary btn-sm" id="btn-add-env">+ Add Environment</button>
           </div>
         </div>
         <div class="dc-summary-cards">
@@ -222,6 +222,14 @@ const SanityChecks = {
     const errorCount = allEnvMonitors.filter(m => m.currentStatus === 'error' || m.currentStatus === 'unknown' || !m.lastCheckedAt).length;
     const totalCount = allEnvMonitors.length;
 
+    // Last checked: most recent lastCheckedAt across all monitors in this env
+    const checkedDates = allEnvMonitors
+      .filter(m => m.lastCheckedAt)
+      .map(m => new Date(m.lastCheckedAt.endsWith('Z') ? m.lastCheckedAt : m.lastCheckedAt + 'Z'));
+    const lastCheckedLabel = checkedDates.length > 0
+      ? this.timeAgo(new Date(Math.max(...checkedDates)))
+      : 'Never';
+
     // Health: red if any fail, amber if any error, green otherwise
     const healthClass = failCount > 0 ? 'dc-env-health-fail' : errorCount > 0 ? 'dc-env-health-error' : 'dc-env-health-pass';
     const borderClass = failCount > 0 ? 'dc-env-border-fail' : errorCount > 0 ? 'dc-env-border-error' : 'dc-env-border-pass';
@@ -233,6 +241,7 @@ const SanityChecks = {
           <span class="dc-env-health ${healthClass}"></span>
           <span class="dc-env-name">${escapeHtml(envName)}</span>
           <span class="dc-env-url">${escapeHtml(envKey)}</span>
+          <span class="dc-env-last-checked">Checked ${lastCheckedLabel}</span>
           <span class="dc-env-badges">
             ${failCount > 0 ? `<span class="dc-badge dc-badge-fail">${failCount} failing</span>` : ''}
             ${passCount > 0 ? `<span class="dc-badge dc-badge-pass">${passCount} clear</span>` : ''}
@@ -363,7 +372,7 @@ const SanityChecks = {
         <p>Sync from a Pulse Client or add checks manually.</p>
         <div style="display:flex;gap:8px;justify-content:center;margin-top:1rem;">
           <button class="btn btn-secondary" id="btn-sync-client-empty">Sync from Client</button>
-          <a href="#/sanity-checks/add" class="btn btn-primary">+ Add Check</a>
+          <button class="btn btn-primary" id="btn-add-env-empty">+ Add Environment</button>
         </div>
       </div>
     `;
@@ -424,7 +433,9 @@ const SanityChecks = {
     }
 
     // Sync button(s) — bind both the top-bar and empty-state buttons
-    [document.getElementById('btn-sync-client'), document.getElementById('btn-sync-client-empty')]
+    // "Add Environment" also triggers sync (adding an env = syncing from a new client URL)
+    [document.getElementById('btn-sync-client'), document.getElementById('btn-sync-client-empty'),
+     document.getElementById('btn-add-env'), document.getElementById('btn-add-env-empty')]
       .filter(Boolean)
       .forEach(btn => btn.addEventListener('click', () => this.syncFromClient(app)));
 

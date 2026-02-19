@@ -2890,6 +2890,13 @@ select.staging-cell-input {
   max-width: 260px;
 }
 
+.dc-env-last-checked {
+  font-size: 0.72rem;
+  color: var(--color-text-tertiary);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
 .dc-env-badges {
   display: flex;
   align-items: center;
