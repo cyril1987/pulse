@@ -1,6 +1,6 @@
 const VALID_PRIORITIES = ['low', 'medium', 'high', 'urgent'];
 const VALID_STATUSES = ['todo', 'in_progress', 'done', 'cancelled'];
-const VALID_SOURCES = ['manual', 'ismart', 'recurring', 'jira'];
+const VALID_SOURCES = ['manual', 'ismart', 'recurring', 'jira', 'sanity_check'];
 const VALID_RECURRENCE_TYPES = ['daily', 'weekly', 'monthly', 'yearly'];
 
 function validateTaskData(data) {

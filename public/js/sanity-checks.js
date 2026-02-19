@@ -114,7 +114,6 @@ const SanityChecks = {
         <div class="dc-headline">
           <h1>Data Checks</h1>
           <div class="dc-headline-actions">
-            <button class="btn btn-secondary btn-sm" id="btn-sync-client">Sync from Client</button>
             <button class="btn btn-secondary btn-sm" id="btn-run-all">Run All</button>
             <button class="btn btn-primary btn-sm" id="btn-add-env">+ Add Environment</button>
           </div>
@@ -213,7 +212,9 @@ const SanityChecks = {
   },
 
   renderEnvironmentSection(envKey, filteredMonitors, allEnvMonitors) {
-    const envName = this.extractEnvName(envKey);
+    // Use env data from the first monitor (all monitors in same env share env data)
+    const sample = allEnvMonitors[0] || {};
+    const envName = sample.envName || this.extractEnvName(envKey);
     const isExpanded = this.expandedEnvironments[envKey] !== false;
 
     // Stats from ALL monitors in this env (not just filtered)
@@ -230,6 +231,10 @@ const SanityChecks = {
       ? this.timeAgo(new Date(Math.max(...checkedDates)))
       : 'Never';
 
+    // Env-level info
+    const freqLabel = this.formatFrequency(sample.envFrequencySeconds);
+    const ownerName = sample.envPrimaryUserName || null;
+
     // Health: red if any fail, amber if any error, green otherwise
     const healthClass = failCount > 0 ? 'dc-env-health-fail' : errorCount > 0 ? 'dc-env-health-error' : 'dc-env-health-pass';
     const borderClass = failCount > 0 ? 'dc-env-border-fail' : errorCount > 0 ? 'dc-env-border-error' : 'dc-env-border-pass';
@@ -242,6 +247,8 @@ const SanityChecks = {
           <span class="dc-env-name">${escapeHtml(envName)}</span>
           <span class="dc-env-url">${escapeHtml(envKey)}</span>
           <span class="dc-env-last-checked">Checked ${lastCheckedLabel}</span>
+          ${freqLabel ? `<span class="dc-env-freq">${freqLabel}</span>` : ''}
+          ${ownerName ? `<span class="dc-env-owner">${escapeHtml(ownerName)}</span>` : ''}
           <span class="dc-env-badges">
             ${failCount > 0 ? `<span class="dc-badge dc-badge-fail">${failCount} failing</span>` : ''}
             ${passCount > 0 ? `<span class="dc-badge dc-badge-pass">${passCount} clear</span>` : ''}
@@ -369,9 +376,8 @@ const SanityChecks = {
     return `
       <div class="dc-empty">
         <h2>No checks found</h2>
-        <p>Sync from a Pulse Client or add checks manually.</p>
+        <p>Add a Pulse Client environment to get started.</p>
         <div style="display:flex;gap:8px;justify-content:center;margin-top:1rem;">
-          <button class="btn btn-secondary" id="btn-sync-client-empty">Sync from Client</button>
           <button class="btn btn-primary" id="btn-add-env-empty">+ Add Environment</button>
         </div>
       </div>
@@ -432,12 +438,10 @@ const SanityChecks = {
       runAllBtn.addEventListener('click', () => this.runAll(app));
     }
 
-    // Sync button(s) — bind both the top-bar and empty-state buttons
-    // "Add Environment" also triggers sync (adding an env = syncing from a new client URL)
-    [document.getElementById('btn-sync-client'), document.getElementById('btn-sync-client-empty'),
-     document.getElementById('btn-add-env'), document.getElementById('btn-add-env-empty')]
+    // Add Environment buttons
+    [document.getElementById('btn-add-env'), document.getElementById('btn-add-env-empty')]
       .filter(Boolean)
-      .forEach(btn => btn.addEventListener('click', () => this.syncFromClient(app)));
+      .forEach(btn => btn.addEventListener('click', () => this.showAddEnvironmentModal(app)));
 
     // Group toggles
     app.querySelectorAll('.dc-group-header').forEach(header => {
@@ -482,17 +486,114 @@ const SanityChecks = {
     }
   },
 
-  async syncFromClient(app) {
-    const clientUrl = prompt('Enter the Pulse Client URL:', 'https://dev.iconcile.com/pulse-client');
-    if (!clientUrl) return;
-
+  async showAddEnvironmentModal(app) {
+    // Fetch users for the primary user dropdown
+    let users = [];
     try {
-      const result = await API.post('/sanity-checks/discover-all', { clientUrl });
-      await Modal.alert(`Sync complete: ${result.created} created, ${result.skipped} already existed (${result.total} total checks)`);
-      this.render(app);
-    } catch (err) {
-      Modal.alert('Sync failed: ' + err.message);
-    }
+      users = await API.get('/tasks/users');
+    } catch { /* ignore */ }
+
+    // Create modal overlay
+    const overlay = document.createElement('div');
+    overlay.className = 'dc-env-modal-overlay';
+    overlay.innerHTML = `
+      <div class="dc-env-modal">
+        <div class="dc-env-modal-header">
+          <h2>Add Environment</h2>
+          <button class="dc-env-modal-close" id="dc-env-modal-close">&times;</button>
+        </div>
+        <form id="dc-env-modal-form">
+          <div class="dc-env-modal-errors" id="dc-env-modal-errors" style="display:none;"></div>
+
+          <div class="form-group">
+            <label for="env-client-url">Client URL *</label>
+            <input type="url" id="env-client-url" required placeholder="https://dev.iconcile.com/pulse-client">
+          </div>
+
+          <div class="form-group">
+            <label for="env-name">Environment Name *</label>
+            <input type="text" id="env-name" required placeholder="DEV" maxlength="50">
+          </div>
+
+          <div class="form-group">
+            <label for="env-primary-user">Primary User</label>
+            <select id="env-primary-user">
+              <option value="">— No Primary User —</option>
+              ${users.map(u => `<option value="${u.id}">${escapeHtml(u.name || u.email)}</option>`).join('')}
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label for="env-frequency">Check Frequency</label>
+            <select id="env-frequency">
+              <option value="60">Every minute</option>
+              <option value="300" selected>Every 5 minutes</option>
+              <option value="900">Every 15 minutes</option>
+              <option value="1800">Every 30 minutes</option>
+              <option value="3600">Every hour</option>
+            </select>
+          </div>
+
+          <div class="dc-env-modal-actions">
+            <button type="button" class="btn btn-secondary" id="dc-env-modal-cancel">Cancel</button>
+            <button type="submit" class="btn btn-primary" id="dc-env-modal-submit">Add Environment</button>
+          </div>
+        </form>
+      </div>
+    `;
+
+    document.body.appendChild(overlay);
+
+    // Auto-fill name from URL
+    const urlInput = overlay.querySelector('#env-client-url');
+    const nameInput = overlay.querySelector('#env-name');
+    urlInput.addEventListener('blur', () => {
+      if (!nameInput.value.trim() && urlInput.value.trim()) {
+        try {
+          const hostname = new URL(urlInput.value.trim()).hostname;
+          const sub = hostname.split('.')[0];
+          if (sub && sub !== 'www') nameInput.value = sub.toUpperCase();
+        } catch { /* ignore */ }
+      }
+    });
+
+    // Close handlers
+    const close = () => overlay.remove();
+    overlay.querySelector('#dc-env-modal-close').addEventListener('click', close);
+    overlay.querySelector('#dc-env-modal-cancel').addEventListener('click', close);
+    overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
+
+    // Submit
+    overlay.querySelector('#dc-env-modal-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const errorsDiv = overlay.querySelector('#dc-env-modal-errors');
+      errorsDiv.style.display = 'none';
+
+      const submitBtn = overlay.querySelector('#dc-env-modal-submit');
+      submitBtn.disabled = true;
+      submitBtn.textContent = 'Adding...';
+
+      try {
+        const result = await API.post('/sanity-checks/environments', {
+          clientUrl: urlInput.value.trim(),
+          name: nameInput.value.trim(),
+          primaryUserId: overlay.querySelector('#env-primary-user').value || null,
+          frequencySeconds: parseInt(overlay.querySelector('#env-frequency').value, 10),
+        });
+
+        close();
+        const disc = result.discovered;
+        if (disc) {
+          await Modal.alert(`Environment "${result.name}" added. ${disc.created} checks discovered, ${disc.skipped} already existed (${disc.total} total).`);
+        }
+        this.render(app);
+      } catch (err) {
+        submitBtn.disabled = false;
+        submitBtn.textContent = 'Add Environment';
+        errorsDiv.style.display = 'block';
+        errorsDiv.textContent = err.data?.error || err.message || 'Failed to add environment';
+      }
+    });
   },
 
   async checkNow(id, app) {
@@ -548,6 +649,13 @@ const SanityChecks = {
       if (btn) { btn.textContent = '\u25B6 Run'; btn.style.pointerEvents = ''; }
       Modal.alert('Run failed: ' + err.message);
     }
+  },
+
+  formatFrequency(seconds) {
+    if (!seconds) return '';
+    if (seconds < 60) return `Every ${seconds}s`;
+    if (seconds < 3600) return `Every ${Math.floor(seconds / 60)} min`;
+    return `Every ${Math.floor(seconds / 3600)}h`;
   },
 
   formatNumber(val) {

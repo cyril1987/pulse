@@ -18,13 +18,16 @@ function esc(str) {
 
 async function tick() {
   try {
-    // Get distinct client URLs that have active monitors due for checking
+    // Get distinct client URLs that have active monitors due for checking (using env-level frequency)
     const dueClients = await db.prepare(`
-      SELECT DISTINCT client_url FROM sanity_check_monitors
-      WHERE is_active = 1
+      SELECT DISTINCT scm.client_url
+      FROM sanity_check_monitors scm
+      LEFT JOIN data_check_environments dce ON dce.client_url = scm.client_url
+      WHERE scm.is_active = 1
+      AND (dce.is_active IS NULL OR dce.is_active = 1)
       AND (
-        last_checked_at IS NULL
-        OR datetime(last_checked_at, '+' || frequency_seconds || ' seconds') <= datetime('now')
+        scm.last_checked_at IS NULL
+        OR datetime(scm.last_checked_at, '+' || COALESCE(dce.frequency_seconds, scm.frequency_seconds) || ' seconds') <= datetime('now')
       )
     `).all();
 
@@ -262,13 +265,17 @@ async function evaluateAndNotify(monitor, result) {
   // For any failing check: ensure a task exists (not just on transition)
   if (status === 'fail') {
     try {
-      const priority = mapSeverityToPriority(monitor.severity);
-      let createdBy = monitor.created_by;
-      // If monitor has no creator, find the first available user
+      // Get environment-level settings (primary user, etc.)
+      const env = await db.prepare('SELECT * FROM data_check_environments WHERE client_url = ?').get(monitor.client_url);
+
+      // Determine assignee: env primary user > monitor creator > first available user
+      let assignedTo = env?.primary_user_id || null;
+      let createdBy = env?.primary_user_id || monitor.created_by;
       if (!createdBy) {
         const anyUser = await db.prepare('SELECT id FROM users LIMIT 1').get();
         createdBy = anyUser ? anyUser.id : null;
       }
+
       // Skip task creation if no valid user exists at all
       if (!createdBy) {
         console.warn(`[SANITY-CHECK] No valid user for task creation on ${code}, skipping task`);
@@ -279,17 +286,24 @@ async function evaluateAndNotify(monitor, result) {
         `).get(code);
 
         if (!existingTask) {
+          // Look up "Data Check" category
+          const dataCheckCategory = await db.prepare("SELECT id FROM task_categories WHERE name = 'Data Check'").get();
+          const categoryId = dataCheckCategory ? dataCheckCategory.id : null;
+          const dueDate = new Date().toISOString().slice(0, 10); // Today YYYY-MM-DD
+
           await db.prepare(`
-            INSERT INTO tasks (title, description, source, source_ref, priority, status, created_by, created_at, updated_at)
-            VALUES (?, ?, 'sanity_check', ?, ?, 'todo', ?, datetime('now'), datetime('now'))
+            INSERT INTO tasks (title, description, source, source_ref, priority, status, due_date, category_id, assigned_to, created_by, created_at, updated_at)
+            VALUES (?, ?, 'sanity_check', ?, 'urgent', 'todo', ?, ?, ?, ?, datetime('now'), datetime('now'))
           `).run(
             `[Data Check FAIL] ${monitor.name}`,
             `Data check "${monitor.name}" (code: ${code}) failed on ${monitor.client_url}.\n\nActual Value: ${actualValue}\nPrevious Value: ${previousValue}\nExpected: ${formatExpected(monitor)}\nSeverity: ${monitor.severity}\nExecution Time: ${executionTimeMs}ms${errorMessage ? '\nError: ' + errorMessage : ''}`,
             code,
-            priority,
+            dueDate,
+            categoryId,
+            assignedTo,
             createdBy
           );
-          console.log(`[SANITY-CHECK] Created task for failed check: ${code}`);
+          console.log(`[SANITY-CHECK] Created urgent task for failed check: ${code} (assigned to user ${assignedTo}, due ${dueDate})`);
         } else {
           console.log(`[SANITY-CHECK] Open task already exists for ${code} (task #${existingTask.id}), skipping`);
         }

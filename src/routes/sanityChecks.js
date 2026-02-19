@@ -75,20 +75,29 @@ function formatResult(row) {
   };
 }
 
-// GET /api/sanity-checks — List all monitors with 24h stats
+// GET /api/sanity-checks — List all monitors with 24h stats + env data
 router.get('/', async (req, res) => {
   try {
     const monitors = await db.prepare(`
       SELECT scm.*,
+        dce.name as env_name,
+        dce.primary_user_id as env_primary_user_id,
+        dce.frequency_seconds as env_frequency_seconds,
+        (SELECT name FROM users WHERE id = dce.primary_user_id) as env_primary_user_name,
         (SELECT COUNT(*) FROM sanity_check_results scr WHERE scr.monitor_id = scm.id AND scr.checked_at >= datetime('now', '-24 hours')) as checks_24h,
         (SELECT COUNT(*) FROM sanity_check_results scr WHERE scr.monitor_id = scm.id AND scr.checked_at >= datetime('now', '-24 hours') AND scr.status = 'pass') as pass_24h,
         (SELECT AVG(scr.execution_time_ms) FROM sanity_check_results scr WHERE scr.monitor_id = scm.id AND scr.checked_at >= datetime('now', '-24 hours')) as avg_exec_24h
       FROM sanity_check_monitors scm
+      LEFT JOIN data_check_environments dce ON dce.client_url = scm.client_url
       ORDER BY scm.group_name, scm.name
     `).all();
 
     res.json(monitors.map(m => ({
       ...formatMonitor(m),
+      envName: m.env_name || null,
+      envPrimaryUserId: m.env_primary_user_id || null,
+      envPrimaryUserName: m.env_primary_user_name || null,
+      envFrequencySeconds: m.env_frequency_seconds || m.frequency_seconds,
       stats24h: {
         totalChecks: m.checks_24h || 0,
         passCount: m.pass_24h || 0,
@@ -142,6 +151,214 @@ router.get('/discover', async (req, res) => {
     res.status(502).json({ error: `Failed to reach client: ${err.message}` });
   }
 });
+
+// ─── Environment CRUD ─────────────────────────────────────────────────────
+
+// GET /api/sanity-checks/environments — List all environments with user info
+router.get('/environments', async (req, res) => {
+  try {
+    const envs = await db.prepare(`
+      SELECT dce.*, u.name as primary_user_name, u.email as primary_user_email
+      FROM data_check_environments dce
+      LEFT JOIN users u ON u.id = dce.primary_user_id
+      ORDER BY dce.name
+    `).all();
+
+    res.json(envs.map(e => ({
+      id: e.id,
+      clientUrl: e.client_url,
+      name: e.name,
+      primaryUserId: e.primary_user_id,
+      primaryUserName: e.primary_user_name || null,
+      primaryUserEmail: e.primary_user_email || null,
+      frequencySeconds: e.frequency_seconds,
+      isActive: e.is_active === 1,
+      createdAt: e.created_at,
+      updatedAt: e.updated_at,
+    })));
+  } catch (err) {
+    console.error('Error listing environments:', err);
+    res.status(500).json({ error: 'Failed to list environments' });
+  }
+});
+
+// POST /api/sanity-checks/environments — Create environment + discover checks
+router.post('/environments', async (req, res) => {
+  try {
+    const { clientUrl, name, primaryUserId, frequencySeconds } = req.body;
+    const cleanUrl = (clientUrl || '').replace(/\/+$/, '');
+
+    if (!cleanUrl) return res.status(400).json({ error: 'clientUrl is required' });
+    if (!name || !name.trim()) return res.status(400).json({ error: 'name is required' });
+
+    const ssrfError = validateClientUrl(cleanUrl);
+    if (ssrfError) return res.status(400).json({ error: ssrfError });
+
+    // Check for duplicate
+    const existing = await db.prepare('SELECT id FROM data_check_environments WHERE client_url = ?').get(cleanUrl);
+    if (existing) return res.status(409).json({ error: 'An environment with this URL already exists' });
+
+    const freq = parseInt(frequencySeconds, 10) || 300;
+    const userId = primaryUserId ? parseInt(primaryUserId, 10) : null;
+
+    // Create the environment
+    const result = await db.prepare(`
+      INSERT INTO data_check_environments (client_url, name, primary_user_id, frequency_seconds)
+      VALUES (?, ?, ?, ?)
+    `).run(cleanUrl, name.trim(), userId, freq);
+
+    const envId = result.lastInsertRowid;
+
+    // Discover and auto-create monitors from the client
+    let created = 0, skipped = 0, total = 0;
+    try {
+      const response = await fetch(`${cleanUrl}/api/checks`, { signal: AbortSignal.timeout(10000) });
+      if (response.ok) {
+        const checks = await response.json();
+        const activeChecks = checks.filter(c => c.isActive !== false);
+        total = activeChecks.length;
+
+        for (const check of activeChecks) {
+          const existingMonitor = await db.prepare(
+            'SELECT id FROM sanity_check_monitors WHERE code = ? AND client_url = ?'
+          ).get(check.code, cleanUrl);
+
+          if (existingMonitor) {
+            if (check.query) {
+              await db.prepare('UPDATE sanity_check_monitors SET query = ? WHERE id = ?').run(check.query, existingMonitor.id);
+            }
+            skipped++;
+            continue;
+          }
+
+          await db.prepare(`
+            INSERT INTO sanity_check_monitors (code, name, client_url, check_type, severity, frequency_seconds, group_name, query, created_by)
+            VALUES (?, ?, ?, ?, 'medium', ?, ?, ?, ?)
+          `).run(
+            check.code,
+            check.name || check.code,
+            cleanUrl,
+            check.checkType || 'custom_threshold',
+            freq,
+            check.groupName || '',
+            check.query || null,
+            req.user.id
+          );
+          created++;
+        }
+      }
+    } catch (discoverErr) {
+      console.warn('Environment created but discovery failed:', discoverErr.message);
+    }
+
+    const env = await db.prepare(`
+      SELECT dce.*, u.name as primary_user_name
+      FROM data_check_environments dce
+      LEFT JOIN users u ON u.id = dce.primary_user_id
+      WHERE dce.id = ?
+    `).get(envId);
+
+    res.status(201).json({
+      id: env.id,
+      clientUrl: env.client_url,
+      name: env.name,
+      primaryUserId: env.primary_user_id,
+      primaryUserName: env.primary_user_name || null,
+      frequencySeconds: env.frequency_seconds,
+      isActive: env.is_active === 1,
+      discovered: { created, skipped, total },
+    });
+  } catch (err) {
+    console.error('Error creating environment:', err);
+    res.status(500).json({ error: 'Failed to create environment' });
+  }
+});
+
+// PUT /api/sanity-checks/environments/:id — Update environment settings
+router.put('/environments/:id', async (req, res) => {
+  try {
+    const env = await db.prepare('SELECT * FROM data_check_environments WHERE id = ?').get(req.params.id);
+    if (!env) return res.status(404).json({ error: 'Environment not found' });
+
+    const { name, primaryUserId, frequencySeconds, isActive } = req.body;
+    const sets = [];
+    const params = [];
+
+    if (name !== undefined) { sets.push('name = ?'); params.push(name.trim()); }
+    if (primaryUserId !== undefined) { sets.push('primary_user_id = ?'); params.push(primaryUserId ? parseInt(primaryUserId, 10) : null); }
+    if (frequencySeconds !== undefined) {
+      const freq = parseInt(frequencySeconds, 10);
+      if (freq >= 30) {
+        sets.push('frequency_seconds = ?');
+        params.push(freq);
+        // Also update all monitors in this environment to match
+      }
+    }
+    if (isActive !== undefined) { sets.push('is_active = ?'); params.push(isActive ? 1 : 0); }
+
+    if (sets.length > 0) {
+      sets.push("updated_at = datetime('now')");
+      params.push(req.params.id);
+      await db.prepare(`UPDATE data_check_environments SET ${sets.join(', ')} WHERE id = ?`).run(...params);
+
+      // If frequency changed, update all monitors in this env
+      if (frequencySeconds !== undefined) {
+        const freq = parseInt(frequencySeconds, 10);
+        if (freq >= 30) {
+          await db.prepare('UPDATE sanity_check_monitors SET frequency_seconds = ? WHERE client_url = ?').run(freq, env.client_url);
+        }
+      }
+    }
+
+    const updated = await db.prepare(`
+      SELECT dce.*, u.name as primary_user_name
+      FROM data_check_environments dce
+      LEFT JOIN users u ON u.id = dce.primary_user_id
+      WHERE dce.id = ?
+    `).get(req.params.id);
+
+    res.json({
+      id: updated.id,
+      clientUrl: updated.client_url,
+      name: updated.name,
+      primaryUserId: updated.primary_user_id,
+      primaryUserName: updated.primary_user_name || null,
+      frequencySeconds: updated.frequency_seconds,
+      isActive: updated.is_active === 1,
+    });
+  } catch (err) {
+    console.error('Error updating environment:', err);
+    res.status(500).json({ error: 'Failed to update environment' });
+  }
+});
+
+// DELETE /api/sanity-checks/environments/:id — Delete environment + cascade
+router.delete('/environments/:id', async (req, res) => {
+  try {
+    const env = await db.prepare('SELECT * FROM data_check_environments WHERE id = ?').get(req.params.id);
+    if (!env) return res.status(404).json({ error: 'Environment not found' });
+
+    await db.transaction(async (tx) => {
+      // Delete results for all monitors in this env
+      await tx.prepare(`
+        DELETE FROM sanity_check_results WHERE monitor_id IN (
+          SELECT id FROM sanity_check_monitors WHERE client_url = ?
+        )
+      `).run(env.client_url);
+      // Delete monitors
+      await tx.prepare('DELETE FROM sanity_check_monitors WHERE client_url = ?').run(env.client_url);
+      // Delete the environment
+      await tx.prepare('DELETE FROM data_check_environments WHERE id = ?').run(req.params.id);
+    });
+
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Error deleting environment:', err);
+    res.status(500).json({ error: 'Failed to delete environment' });
+  }
+});
+
+// ─── Monitor Discovery ─────────────────────────────────────────────────────
 
 // POST /api/sanity-checks/discover-all — Discover and auto-create monitors for all checks from a client
 router.post('/discover-all', async (req, res) => {

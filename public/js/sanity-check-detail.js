@@ -126,7 +126,7 @@ const SanityCheckDetail = {
             </div>
             <div class="dcd-config-item">
               <span class="dcd-config-label">Frequency</span>
-              <span class="dcd-config-value">${this.formatFrequency(monitor.frequencySeconds)}</span>
+              <span class="dcd-config-value">${this.formatFrequency(monitor.envFrequencySeconds || monitor.frequencySeconds)} <span style="color:var(--color-text-tertiary);font-size:0.75rem;">(env)</span></span>
             </div>
             <div class="dcd-config-item">
               <span class="dcd-config-label">Notify</span>

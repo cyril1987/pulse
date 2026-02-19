@@ -100,17 +100,6 @@ const SanityCheckForm = {
 
         <div class="form-row">
           <div class="form-group">
-            <label for="frequencySeconds">Check Frequency</label>
-            <select id="frequencySeconds" name="frequencySeconds">
-              <option value="60" ${isEdit && monitor.frequencySeconds === 60 ? 'selected' : ''}>Every minute</option>
-              <option value="300" ${(!isEdit || monitor.frequencySeconds === 300) ? 'selected' : ''}>Every 5 minutes</option>
-              <option value="900" ${isEdit && monitor.frequencySeconds === 900 ? 'selected' : ''}>Every 15 minutes</option>
-              <option value="1800" ${isEdit && monitor.frequencySeconds === 1800 ? 'selected' : ''}>Every 30 minutes</option>
-              <option value="3600" ${isEdit && monitor.frequencySeconds === 3600 ? 'selected' : ''}>Every hour</option>
-            </select>
-          </div>
-
-          <div class="form-group">
             <label for="groupName">Group</label>
             <div id="group-container">
               <select id="groupName" name="groupName">
@@ -247,7 +236,6 @@ const SanityCheckForm = {
       clientUrl: document.getElementById('clientUrl').value.trim(),
       checkType: document.getElementById('checkType').value,
       severity: document.getElementById('severity').value,
-      frequencySeconds: parseInt(document.getElementById('frequencySeconds').value, 10),
       groupName,
       notifyEmail: document.getElementById('notifyEmail').value.trim(),
     };
