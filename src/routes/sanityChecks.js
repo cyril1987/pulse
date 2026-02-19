@@ -53,7 +53,6 @@ function formatMonitor(row) {
     lastValue: row.last_value,
     lastCheckedAt: row.last_checked_at,
     lastStatusChangeAt: row.last_status_change_at,
-    query: row.query,
     createdBy: row.created_by,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -224,16 +223,13 @@ router.post('/environments', async (req, res) => {
           ).get(check.code, cleanUrl);
 
           if (existingMonitor) {
-            if (check.query) {
-              await db.prepare('UPDATE sanity_check_monitors SET query = ? WHERE id = ?').run(check.query, existingMonitor.id);
-            }
             skipped++;
             continue;
           }
 
           await db.prepare(`
-            INSERT INTO sanity_check_monitors (code, name, client_url, check_type, severity, frequency_seconds, group_name, query, created_by)
-            VALUES (?, ?, ?, ?, 'medium', ?, ?, ?, ?)
+            INSERT INTO sanity_check_monitors (code, name, client_url, check_type, severity, frequency_seconds, group_name, created_by)
+            VALUES (?, ?, ?, ?, 'medium', ?, ?, ?)
           `).run(
             check.code,
             check.name || check.code,
@@ -241,7 +237,6 @@ router.post('/environments', async (req, res) => {
             check.checkType || 'custom_threshold',
             freq,
             check.groupName || '',
-            check.query || null,
             req.user.id
           );
           created++;
@@ -394,18 +389,14 @@ router.post('/discover-all', async (req, res) => {
       ).get(check.code, clientUrl);
 
       if (existing) {
-        // Update the query if it wasn't stored before
-        if (check.query) {
-          await db.prepare('UPDATE sanity_check_monitors SET query = ? WHERE id = ?').run(check.query, existing.id);
-        }
         skipped++;
         results.push({ code: check.code, status: 'skipped', reason: 'already exists' });
         continue;
       }
 
       await db.prepare(`
-        INSERT INTO sanity_check_monitors (code, name, client_url, check_type, expected_min, expected_max, severity, frequency_seconds, group_name, notify_email, query, created_by)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO sanity_check_monitors (code, name, client_url, check_type, expected_min, expected_max, severity, frequency_seconds, group_name, notify_email, created_by)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).run(
         check.code,
         check.name || check.code,
@@ -417,7 +408,6 @@ router.post('/discover-all', async (req, res) => {
         300,
         check.groupName || '',
         '',
-        check.query || null,
         req.user.id
       );
 

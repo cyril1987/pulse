@@ -98,16 +98,6 @@ const SanityCheckDetail = {
           </div>
         </div>
 
-        <!-- SQL Query -->
-        ${monitor.query ? `
-        <div class="dcd-section">
-          <div class="dcd-section-header">SQL Query</div>
-          <div class="dcd-query-wrap">
-            <pre class="dcd-query-code">${escapeHtml(monitor.query)}</pre>
-          </div>
-        </div>
-        ` : ''}
-
         <!-- Config -->
         <div class="dcd-section">
           <div class="dcd-section-header">Configuration</div>

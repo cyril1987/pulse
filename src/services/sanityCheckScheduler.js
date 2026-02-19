@@ -206,11 +206,6 @@ async function processResult(clientUrl, result) {
       WHERE id = ?
     `).run(newValue, status, status, monitor.id);
 
-    // Store the query from the client if available
-    if (result.query && !monitor.query) {
-      await db.prepare('UPDATE sanity_check_monitors SET query = ? WHERE id = ?').run(result.query, monitor.id);
-    }
-
     // Ensure tasks exist for failing checks, and notify on status/value changes
     if (status === 'fail' || status !== previousStatus || valueChanged) {
       await evaluateAndNotify(monitor, {
