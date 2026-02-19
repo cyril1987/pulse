@@ -3182,6 +3182,83 @@ select.staging-cell-input {
   border-top: 1px solid var(--color-border);
 }
 
+/* Manage Environments Modal — wide variant */
+.dc-env-modal-wide {
+  max-width: 640px;
+}
+.dc-manage-env-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  max-height: 50vh;
+  overflow-y: auto;
+  padding: 0.25rem 0;
+}
+.dc-manage-env-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.75rem;
+  border: 1px solid var(--color-card-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-card);
+  flex-wrap: wrap;
+}
+.dc-manage-env-info {
+  flex: 1 1 180px;
+  min-width: 0;
+}
+.dc-manage-env-name {
+  font-weight: 600;
+  font-size: 0.85rem;
+  color: var(--color-text);
+}
+.dc-manage-env-url {
+  font-size: 0.7rem;
+  color: var(--color-text-tertiary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.dc-manage-env-fields {
+  display: flex;
+  gap: 0.5rem;
+  flex: 1 1 260px;
+}
+.dc-manage-env-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  flex: 1;
+}
+.dc-manage-env-field label {
+  font-size: 0.6rem;
+  color: var(--color-text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.dc-manage-env-field select {
+  font-size: 0.75rem;
+  padding: 0.3rem 0.4rem;
+  border: 1px solid var(--color-card-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-bg-secondary);
+  color: var(--color-text);
+}
+.dc-manage-env-actions {
+  display: flex;
+  gap: 0.35rem;
+  flex-shrink: 0;
+}
+.btn-danger {
+  background: transparent;
+  color: var(--color-danger);
+  border: 1px solid var(--color-danger);
+}
+.btn-danger:hover {
+  background: rgba(244, 63, 94, 0.12);
+}
+
 /* ═══════════════════════════════════════════════════════════════════════════
    Data Check Detail (dcd-*)
    ═══════════════════════════════════════════════════════════════════════════ */

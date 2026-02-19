@@ -115,6 +115,7 @@ const SanityChecks = {
           <h1>Data Checks</h1>
           <div class="dc-headline-actions">
             <button class="btn btn-secondary btn-sm" id="btn-run-all">Run All</button>
+            <button class="btn btn-secondary btn-sm" id="btn-manage-env">Manage Environments</button>
             <button class="btn btn-primary btn-sm" id="btn-add-env">+ Add Environment</button>
           </div>
         </div>
@@ -443,6 +444,12 @@ const SanityChecks = {
       .filter(Boolean)
       .forEach(btn => btn.addEventListener('click', () => this.showAddEnvironmentModal(app)));
 
+    // Manage Environments button
+    const manageEnvBtn = document.getElementById('btn-manage-env');
+    if (manageEnvBtn) {
+      manageEnvBtn.addEventListener('click', () => this.showManageEnvironmentsModal(app));
+    }
+
     // Group toggles
     app.querySelectorAll('.dc-group-header').forEach(header => {
       header.addEventListener('click', () => {
@@ -594,6 +601,149 @@ const SanityChecks = {
         errorsDiv.textContent = err.data?.error || err.message || 'Failed to add environment';
       }
     });
+  },
+
+  async showManageEnvironmentsModal(app) {
+    let environments = [];
+    let users = [];
+    try {
+      [environments, users] = await Promise.all([
+        API.get('/sanity-checks/environments'),
+        API.get('/tasks/users'),
+      ]);
+    } catch (err) {
+      Modal.alert('Failed to load environments: ' + err.message);
+      return;
+    }
+
+    const freqOptions = [
+      { value: 60, label: 'Every minute' },
+      { value: 300, label: 'Every 5 minutes' },
+      { value: 900, label: 'Every 15 minutes' },
+      { value: 1800, label: 'Every 30 minutes' },
+      { value: 3600, label: 'Every hour' },
+    ];
+
+    const overlay = document.createElement('div');
+    overlay.className = 'dc-env-modal-overlay';
+
+    const renderEnvList = () => {
+      if (environments.length === 0) {
+        return '<p style="color:var(--color-text-tertiary);padding:1rem 0">No environments configured yet.</p>';
+      }
+      return environments.map(env => `
+        <div class="dc-manage-env-row" data-env-id="${env.id}">
+          <div class="dc-manage-env-info">
+            <div class="dc-manage-env-name">${escapeHtml(env.name)}</div>
+            <div class="dc-manage-env-url">${escapeHtml(env.clientUrl)}</div>
+          </div>
+          <div class="dc-manage-env-fields">
+            <div class="dc-manage-env-field">
+              <label>Primary User</label>
+              <select class="dc-manage-env-user" data-env-id="${env.id}">
+                <option value="">— None —</option>
+                ${users.map(u => `<option value="${u.id}" ${env.primaryUserId === u.id ? 'selected' : ''}>${escapeHtml(u.name || u.email)}</option>`).join('')}
+              </select>
+            </div>
+            <div class="dc-manage-env-field">
+              <label>Frequency</label>
+              <select class="dc-manage-env-freq" data-env-id="${env.id}">
+                ${freqOptions.map(f => `<option value="${f.value}" ${env.frequencySeconds === f.value ? 'selected' : ''}>${f.label}</option>`).join('')}
+              </select>
+            </div>
+          </div>
+          <div class="dc-manage-env-actions">
+            <button class="btn btn-sm btn-primary dc-manage-env-save" data-env-id="${env.id}">Save</button>
+            <button class="btn btn-sm btn-danger dc-manage-env-delete" data-env-id="${env.id}">Delete</button>
+          </div>
+        </div>
+      `).join('');
+    };
+
+    const renderModal = () => {
+      overlay.innerHTML = `
+        <div class="dc-env-modal dc-env-modal-wide">
+          <div class="dc-env-modal-header">
+            <h2>Manage Environments</h2>
+            <button class="dc-env-modal-close" id="dc-manage-close">&times;</button>
+          </div>
+          <div class="dc-manage-env-list">
+            ${renderEnvList()}
+          </div>
+          <div class="dc-env-modal-actions" style="justify-content:flex-end">
+            <button class="btn btn-secondary" id="dc-manage-done">Done</button>
+          </div>
+        </div>
+      `;
+      bindModalEvents();
+    };
+
+    const close = () => { overlay.remove(); this.render(app); };
+
+    const bindModalEvents = () => {
+      overlay.querySelector('#dc-manage-close').addEventListener('click', close);
+      overlay.querySelector('#dc-manage-done').addEventListener('click', close);
+      overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
+
+      // Save buttons
+      overlay.querySelectorAll('.dc-manage-env-save').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          const envId = btn.dataset.envId;
+          const row = overlay.querySelector(`.dc-manage-env-row[data-env-id="${envId}"]`);
+          const userSelect = row.querySelector('.dc-manage-env-user');
+          const freqSelect = row.querySelector('.dc-manage-env-freq');
+
+          btn.disabled = true;
+          btn.textContent = 'Saving...';
+          try {
+            await API.put(`/sanity-checks/environments/${envId}`, {
+              primaryUserId: userSelect.value || null,
+              frequencySeconds: parseInt(freqSelect.value, 10),
+            });
+            btn.textContent = 'Saved!';
+            // Update local copy
+            const env = environments.find(e => e.id === parseInt(envId));
+            if (env) {
+              env.primaryUserId = userSelect.value ? parseInt(userSelect.value) : null;
+              env.frequencySeconds = parseInt(freqSelect.value, 10);
+            }
+            setTimeout(() => { btn.disabled = false; btn.textContent = 'Save'; }, 1000);
+          } catch (err) {
+            btn.disabled = false;
+            btn.textContent = 'Save';
+            Modal.alert('Failed to save: ' + err.message);
+          }
+        });
+      });
+
+      // Delete buttons
+      overlay.querySelectorAll('.dc-manage-env-delete').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          const envId = btn.dataset.envId;
+          const env = environments.find(e => e.id === parseInt(envId));
+          const confirmed = await Modal.confirm(
+            `Delete environment "${env?.name || envId}" and all its monitors and results? This cannot be undone.`,
+            'Delete Environment'
+          );
+          if (!confirmed) return;
+
+          btn.disabled = true;
+          btn.textContent = 'Deleting...';
+          try {
+            await API.delete(`/sanity-checks/environments/${envId}`);
+            environments = environments.filter(e => e.id !== parseInt(envId));
+            renderModal();
+          } catch (err) {
+            btn.disabled = false;
+            btn.textContent = 'Delete';
+            Modal.alert('Failed to delete: ' + err.message);
+          }
+        });
+      });
+    };
+
+    document.body.appendChild(overlay);
+    renderModal();
   },
 
   async checkNow(id, app) {
