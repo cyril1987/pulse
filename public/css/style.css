@@ -1317,9 +1317,19 @@ select.staging-cell-input {
 /* Tasks Page Tabs */
 .tasks-page-tabs {
   display: flex;
-  gap: 0;
+  justify-content: space-between;
+  align-items: center;
   border-bottom: 2px solid var(--color-card-border);
   margin: -0.75rem 0 1rem;
+}
+.tasks-page-tabs-left {
+  display: flex;
+  gap: 0;
+}
+.tasks-page-tabs-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
 }
 .tasks-page-tab {
   padding: 0.6rem 1.25rem;

@@ -66,11 +66,14 @@ async function initAuth() {
   }
 }
 
-function renderTasksTabs(activeTab) {
+function renderTasksTabs(activeTab, actionsHtml) {
   return `
     <div class="tasks-page-tabs">
-      <a href="#/tasks" class="tasks-page-tab ${activeTab === 'dashboard' ? 'active' : ''}">My Dashboard</a>
-      <a href="#/tasks/manage" class="tasks-page-tab ${activeTab === 'manage' ? 'active' : ''}">Manage Tasks</a>
+      <div class="tasks-page-tabs-left">
+        <a href="#/tasks" class="tasks-page-tab ${activeTab === 'dashboard' ? 'active' : ''}">My Dashboard</a>
+        <a href="#/tasks/manage" class="tasks-page-tab ${activeTab === 'manage' ? 'active' : ''}">Manage Tasks</a>
+      </div>
+      ${actionsHtml ? `<div class="tasks-page-tabs-actions">${actionsHtml}</div>` : ''}
     </div>
   `;
 }
