@@ -184,7 +184,6 @@ const Tasks = {
     const isOverdue = task.dueDate && task.status !== 'done' && task.status !== 'cancelled' && task.dueDate < today;
     const isSubtask = !!task.parentTaskId;
     const showAssignCol = Tasks.currentView !== 'my';
-    const canAssignToMe = !task.assignedTo || task.assignedTo !== (typeof currentUser !== 'undefined' ? currentUser.id : null);
 
     return `
       <tr class="task-row ${isOverdue ? 'task-overdue' : ''} ${isSubtask ? 'task-row-subtask' : ''}" style="cursor:pointer" onclick="location.hash='#/tasks/${task.id}'">
@@ -223,9 +222,11 @@ const Tasks = {
         ${showAssignCol ? `
           <td onclick="event.stopPropagation()">
             <div class="task-assign-cell">
-              ${task.assignedToAvatar ? `<img class="task-avatar" src="${escapeHtml(task.assignedToAvatar)}" alt="" referrerpolicy="no-referrer">` : ''}
-              ${task.assignedToName ? `<span>${escapeHtml(task.assignedToName)}</span>` : '<span style="color:var(--color-text-tertiary)">Unassigned</span>'}
-              ${canAssignToMe ? `<button class="btn-assign-me" data-task-id="${task.id}" title="Assign to me">👤 Me</button>` : ''}
+              ${task.assignedToAvatar ? `<img class="task-avatar" src="${escapeHtml(task.assignedToAvatar)}" alt="" referrerpolicy="no-referrer">` : '<span class="task-avatar-placeholder">👤</span>'}
+              <select class="task-assign-select" data-task-id="${task.id}">
+                <option value="">Unassigned</option>
+                ${(Tasks.users || []).map(u => `<option value="${u.id}" ${task.assignedTo === u.id ? 'selected' : ''}>${escapeHtml(u.name)}</option>`).join('')}
+              </select>
             </div>
           </td>
         ` : ''}
@@ -349,21 +350,30 @@ const Tasks = {
       });
     });
 
-    // Assign to me buttons
-    container.querySelectorAll('.btn-assign-me').forEach(btn => {
-      btn.addEventListener('click', async (e) => {
+    // Inline assignment select
+    container.querySelectorAll('.task-assign-select').forEach(sel => {
+      sel.addEventListener('change', async (e) => {
         e.stopPropagation();
-        const taskId = btn.dataset.taskId;
-        btn.disabled = true;
-        btn.textContent = '...';
+        const taskId = sel.dataset.taskId;
+        const newUserId = sel.value ? parseInt(sel.value, 10) : null;
+        sel.disabled = true;
         try {
-          await API.post(`/tasks/${taskId}/assign-to-me`);
-          Tasks.render(container, Tasks.currentView);
+          await API.patch(`/tasks/${taskId}`, { assignedTo: newUserId });
+          // Update avatar next to the select
+          const newUser = newUserId ? (Tasks.users || []).find(u => u.id === newUserId) : null;
+          const avatarEl = sel.closest('.task-assign-cell').querySelector('.task-avatar, .task-avatar-placeholder');
+          if (avatarEl) {
+            if (newUser && newUser.avatarUrl) {
+              avatarEl.outerHTML = `<img class="task-avatar" src="${escapeHtml(newUser.avatarUrl)}" alt="" referrerpolicy="no-referrer">`;
+            } else {
+              avatarEl.outerHTML = `<span class="task-avatar-placeholder">👤</span>`;
+            }
+          }
         } catch (err) {
-          Modal.alert('Failed to assign: ' + err.message, 'Error');
-          btn.disabled = false;
-          btn.textContent = '👤 Me';
+          Modal.alert('Failed to reassign: ' + err.message, 'Error');
+          Tasks.render(container, Tasks.currentView);
         }
+        sel.disabled = false;
       });
     });
   },

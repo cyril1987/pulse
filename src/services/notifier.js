@@ -1,4 +1,5 @@
 const { sendEmail } = require('./emailSender');
+const { monitorDown, monitorRecovered, testEmail } = require('./emailTemplates');
 const db = require('../db');
 const config = require('../config');
 
@@ -75,7 +76,13 @@ async function sendDownAlert(monitor, checkResult) {
 
   if (!(await shouldNotifyMonitor(monitor.notify_email))) return;
 
-  const subject = `[DOWN] Monitor Alert: ${monitor.name} (${monitor.url})`;
+  const subject = `[DOWN] ${monitor.name} is not responding`;
+  const html = monitorDown({
+    monitorName: monitor.name,
+    url: monitor.url,
+    errorMessage: checkResult.errorMessage || null,
+    statusCode: checkResult.statusCode || null,
+  });
   const text = [
     `Monitor: ${monitor.name}`,
     `URL: ${monitor.url}`,
@@ -88,7 +95,7 @@ async function sendDownAlert(monitor, checkResult) {
   ].join('\n');
 
   try {
-    await sendEmail({ to: monitor.notify_email, subject, text });
+    await sendEmail({ to: monitor.notify_email, subject, text, html });
     await db.prepare(`
       INSERT INTO notifications (monitor_id, type, email, details) VALUES (?, ?, ?, ?)
     `).run(
@@ -129,7 +136,12 @@ async function sendRecoveryAlert(monitor) {
     }
   }
 
-  const subject = `[RECOVERED] Monitor Alert: ${monitor.name} (${monitor.url})`;
+  const subject = `[RECOVERED] ${monitor.name} is back up`;
+  const html = monitorRecovered({
+    monitorName: monitor.name,
+    url: monitor.url,
+    downtimeDuration,
+  });
   const text = [
     `Monitor: ${monitor.name}`,
     `URL: ${monitor.url}`,
@@ -141,7 +153,7 @@ async function sendRecoveryAlert(monitor) {
   ].join('\n');
 
   try {
-    await sendEmail({ to: monitor.notify_email, subject, text });
+    await sendEmail({ to: monitor.notify_email, subject, text, html });
     await db.prepare(`
       INSERT INTO notifications (monitor_id, type, email, details) VALUES (?, ?, ?, ?)
     `).run(
@@ -160,7 +172,8 @@ async function sendTestEmail(toEmail) {
   const { getProviderName } = require('./emailSender');
   const provider = getProviderName();
 
-  const subject = '[TEST] iConcile Pulse - Email Configuration Test';
+  const subject = '[TEST] iConcile Pulse — Email Configuration Test';
+  const html = testEmail({ provider });
   const text = [
     'This is a test email from iConcile Pulse.',
     '',
@@ -172,7 +185,7 @@ async function sendTestEmail(toEmail) {
     '-- iConcile Pulse',
   ].join('\n');
 
-  await sendEmail({ to: toEmail, subject, text });
+  await sendEmail({ to: toEmail, subject, text, html });
 }
 
 module.exports = { evaluateAndNotify, sendTestEmail };

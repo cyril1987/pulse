@@ -1,4 +1,5 @@
 const { sendEmail } = require('./emailSender');
+const { taskAssigned, taskStatusChanged, tasksDueSoon, tasksOverdue } = require('./emailTemplates');
 const db = require('../db');
 
 // ─── Preference Check ────────────────────────────────────────────────────────
@@ -36,6 +37,15 @@ async function notifyAssignment(task, assignedUser, assignedByName) {
   if (recent.count > 0) return;
 
   const subject = `[TASK] Assigned to you: ${task.title}`;
+  const html = taskAssigned({
+    recipientName: assignedUser.name,
+    taskTitle: task.title,
+    priority: task.priority,
+    dueDate: task.due_date || null,
+    assignedBy: assignedByName,
+    source: task.source,
+    description: task.description || null,
+  });
   const text = [
     `Task: ${task.title}`,
     `Priority: ${task.priority}`,
@@ -49,7 +59,7 @@ async function notifyAssignment(task, assignedUser, assignedByName) {
   ].filter(Boolean).join('\n');
 
   try {
-    await sendEmail({ to: assignedUser.email, subject, text });
+    await sendEmail({ to: assignedUser.email, subject, text, html });
     await db.prepare(
       'INSERT INTO task_notifications (task_id, type, email, details) VALUES (?, ?, ?, ?)'
     ).run(task.id, 'assigned', assignedUser.email, JSON.stringify({ assignedBy: assignedByName }));
@@ -77,6 +87,15 @@ async function notifyStatusChange(task, oldStatus, newStatus, changedByName) {
   if (recent.count > 0) return;
 
   const subject = `[TASK] Status changed: ${task.title} — ${oldStatus} → ${newStatus}`;
+  const html = taskStatusChanged({
+    recipientName: assignee.name,
+    taskTitle: task.title,
+    oldStatus,
+    newStatus,
+    changedBy: changedByName,
+    priority: task.priority,
+    dueDate: task.due_date || null,
+  });
   const text = [
     `Task: ${task.title}`,
     `Status: ${oldStatus} → ${newStatus}`,
@@ -88,7 +107,7 @@ async function notifyStatusChange(task, oldStatus, newStatus, changedByName) {
   ].join('\n');
 
   try {
-    await sendEmail({ to: assignee.email, subject, text });
+    await sendEmail({ to: assignee.email, subject, text, html });
     await db.prepare(
       'INSERT INTO task_notifications (task_id, type, email, details) VALUES (?, ?, ?, ?)'
     ).run(task.id, 'status_change', assignee.email, JSON.stringify({ oldStatus, newStatus, changedBy: changedByName }));
@@ -143,32 +162,27 @@ async function checkDueSoonTasks() {
 
     const subject = dueSoonTasks.length === 1
       ? `[TASK] Due soon: ${dueSoonTasks[0].title} — due ${dueSoonTasks[0].due_date}`
-      : `[TASK] ${dueSoonTasks.length} tasks due soon`;
+      : `[TASK] ${dueSoonTasks.length} tasks due within 24 hours`;
 
+    const html = tasksDueSoon({ recipientName: name, tasks: dueSoonTasks });
+
+    // Plain-text fallback
+    const priorityOrder = { urgent: 0, high: 1, medium: 2, low: 3 };
+    dueSoonTasks.sort((a, b) => (priorityOrder[a.priority] || 3) - (priorityOrder[b.priority] || 3));
     const lines = [
       `Hi ${name || 'there'},`,
       '',
-      dueSoonTasks.length === 1
-        ? 'You have 1 task due within the next 24 hours:'
-        : `You have ${dueSoonTasks.length} tasks due within the next 24 hours:`,
+      `You have ${dueSoonTasks.length} task${dueSoonTasks.length !== 1 ? 's' : ''} due within the next 24 hours:`,
       '',
+      ...dueSoonTasks.map(t => `  • [${(t.priority || 'medium').toUpperCase()}] ${t.title}\n    Due: ${t.due_date} · Status: ${t.status.replace('_', ' ')}`),
+      '',
+      'Please plan to complete these tasks soon.',
+      '',
+      '-- iConcile Pulse Tasks',
     ];
 
-    const priorityOrder = { urgent: 0, high: 1, medium: 2, low: 3 };
-    dueSoonTasks.sort((a, b) => (priorityOrder[a.priority] || 3) - (priorityOrder[b.priority] || 3));
-
-    for (const t of dueSoonTasks) {
-      lines.push(`  • [${(t.priority || 'medium').toUpperCase()}] ${t.title}`);
-      lines.push(`    Due: ${t.due_date} · Status: ${t.status.replace('_', ' ')}`);
-    }
-
-    lines.push('');
-    lines.push('Please plan to complete these tasks soon.');
-    lines.push('');
-    lines.push('-- iConcile Pulse Tasks');
-
     try {
-      await sendEmail({ to: email, subject, text: lines.join('\n') });
+      await sendEmail({ to: email, subject, text: lines.join('\n'), html });
 
       for (const t of dueSoonTasks) {
         await db.prepare(
@@ -230,31 +244,25 @@ async function checkOverdueTasks() {
       ? `[TASK] Overdue: ${overdueTasks[0].title} — was due ${overdueTasks[0].due_date}`
       : `[TASK] ${overdueTasks.length} overdue tasks need your attention`;
 
+    const html = tasksOverdue({ recipientName: name, tasks: overdueTasks });
+
+    // Plain-text fallback
+    const priorityOrder = { urgent: 0, high: 1, medium: 2, low: 3 };
+    overdueTasks.sort((a, b) => (priorityOrder[a.priority] || 3) - (priorityOrder[b.priority] || 3) || (a.due_date || '').localeCompare(b.due_date || ''));
     const lines = [
       `Hi ${name || 'there'},`,
       '',
-      overdueTasks.length === 1
-        ? 'You have 1 overdue task:'
-        : `You have ${overdueTasks.length} overdue tasks:`,
+      `You have ${overdueTasks.length} overdue task${overdueTasks.length !== 1 ? 's' : ''}:`,
       '',
+      ...overdueTasks.map(t => `  • [${(t.priority || 'medium').toUpperCase()}] ${t.title}\n    Due: ${t.due_date} · Status: ${t.status.replace('_', ' ')}`),
+      '',
+      'Please complete these tasks as soon as possible.',
+      '',
+      '-- iConcile Pulse Tasks',
     ];
 
-    // Sort by priority (urgent first) then by due date
-    const priorityOrder = { urgent: 0, high: 1, medium: 2, low: 3 };
-    overdueTasks.sort((a, b) => (priorityOrder[a.priority] || 3) - (priorityOrder[b.priority] || 3) || (a.due_date || '').localeCompare(b.due_date || ''));
-
-    for (const t of overdueTasks) {
-      lines.push(`  • [${(t.priority || 'medium').toUpperCase()}] ${t.title}`);
-      lines.push(`    Due: ${t.due_date} · Status: ${t.status.replace('_', ' ')}`);
-    }
-
-    lines.push('');
-    lines.push('Please complete these tasks as soon as possible.');
-    lines.push('');
-    lines.push('-- iConcile Pulse Tasks');
-
     try {
-      await sendEmail({ to: email, subject, text: lines.join('\n') });
+      await sendEmail({ to: email, subject, text: lines.join('\n'), html });
 
       // Log notifications for each task
       for (const t of overdueTasks) {

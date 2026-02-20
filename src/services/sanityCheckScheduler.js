@@ -1,5 +1,6 @@
 const db = require('../db');
 const { sendEmail } = require('./emailSender');
+const { dataCheckFail, dataCheckRecovered } = require('./emailTemplates');
 
 let lastNotification = {};
 // Periodically clean up stale notification throttle entries (older than 30 minutes)
@@ -9,12 +10,6 @@ setInterval(() => {
     if (lastNotification[key] < cutoff) delete lastNotification[key];
   }
 }, 10 * 60 * 1000); // every 10 minutes
-
-/** HTML-escape a string for safe interpolation into email HTML */
-function esc(str) {
-  if (str == null) return '';
-  return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-}
 
 // Returns true if the current time falls within one of the scheduled windows (8AM, 4PM, 8PM IST)
 // We use a ±10-minute window so the scheduler tick (which may run every 30s) doesn't miss a slot.
@@ -356,19 +351,19 @@ async function evaluateAndNotify(monitor, result) {
         try {
           await sendEmail({
             to: monitor.notify_email,
-            subject: `[SANITY CHECK FAIL] ${monitor.name} (${code})`,
-            text: `Sanity Check Failed\n\nCheck: ${monitor.name} (${code})\nClient: ${monitor.client_url}\nSeverity: ${monitor.severity}\nActual Value: ${actualValue}\nPrevious Value: ${previousValue}\nExpected: ${formatExpected(monitor)}\nExecution Time: ${executionTimeMs}ms${errorMessage ? `\nError: ${errorMessage}` : ''}\n\n-- iConcile Pulse`,
-            html: `
-              <h2>Sanity Check Failed</h2>
-              <p><strong>Check:</strong> ${esc(monitor.name)} (${esc(code)})</p>
-              <p><strong>Client:</strong> ${esc(monitor.client_url)}</p>
-              <p><strong>Severity:</strong> ${esc(monitor.severity)}</p>
-              <p><strong>Actual Value:</strong> ${esc(String(actualValue))}</p>
-              <p><strong>Previous Value:</strong> ${esc(String(previousValue))}</p>
-              <p><strong>Expected:</strong> ${esc(formatExpected(monitor))}</p>
-              <p><strong>Execution Time:</strong> ${esc(String(executionTimeMs))}ms</p>
-              ${errorMessage ? `<p><strong>Error:</strong> ${esc(errorMessage)}</p>` : ''}
-            `,
+            subject: `[DATA CHECK FAIL] ${monitor.name} (${code})`,
+            text: `Data Check Failed\n\nCheck: ${monitor.name} (${code})\nClient: ${monitor.client_url}\nSeverity: ${monitor.severity}\nActual Value: ${actualValue}\nPrevious Value: ${previousValue}\nExpected: ${formatExpected(monitor)}\nExecution Time: ${executionTimeMs}ms${errorMessage ? `\nError: ${errorMessage}` : ''}\n\n-- iConcile Pulse`,
+            html: dataCheckFail({
+              monitorName: monitor.name,
+              code,
+              clientUrl: monitor.client_url,
+              severity: monitor.severity,
+              actualValue,
+              previousValue,
+              expectedRange: formatExpected(monitor),
+              executionTimeMs,
+              errorMessage: errorMessage || null,
+            }),
           });
         } catch (err) {
           console.error(`[SANITY-CHECK] Failed to send email for ${code}:`, err.message);
@@ -384,15 +379,15 @@ async function evaluateAndNotify(monitor, result) {
       try {
         await sendEmail({
           to: monitor.notify_email,
-          subject: `[SANITY CHECK RECOVERED] ${monitor.name} (${code})`,
-          text: `Sanity Check Recovered\n\nCheck: ${monitor.name} (${code})\nClient: ${monitor.client_url}\nCurrent Value: ${actualValue}\nPrevious Value: ${previousValue}\n\n-- iConcile Pulse`,
-          html: `
-            <h2>Sanity Check Recovered</h2>
-            <p><strong>Check:</strong> ${esc(monitor.name)} (${esc(code)})</p>
-            <p><strong>Client:</strong> ${esc(monitor.client_url)}</p>
-            <p><strong>Current Value:</strong> ${esc(String(actualValue))}</p>
-            <p><strong>Previous Value:</strong> ${esc(String(previousValue))}</p>
-          `,
+          subject: `[DATA CHECK RECOVERED] ${monitor.name} (${code})`,
+          text: `Data Check Recovered\n\nCheck: ${monitor.name} (${code})\nClient: ${monitor.client_url}\nCurrent Value: ${actualValue}\nPrevious Value: ${previousValue}\n\n-- iConcile Pulse`,
+          html: dataCheckRecovered({
+            monitorName: monitor.name,
+            code,
+            clientUrl: monitor.client_url,
+            actualValue,
+            previousValue,
+          }),
         });
       } catch (err) {
         console.error(`[SANITY-CHECK] Failed to send recovery email for ${code}:`, err.message);

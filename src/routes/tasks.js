@@ -357,8 +357,15 @@ router.get('/stats', async (req, res) => {
   const params = [];
 
   if (view === 'unassigned') {
-    userFilter = 'AND assigned_to IS NULL';
-  } else if (view !== 'all') {
+    // Unassigned: exclude private tasks not created by current user
+    userFilter = 'AND assigned_to IS NULL AND (is_private = 0 OR created_by = ?)';
+    params.push(req.user.id);
+  } else if (view === 'all') {
+    // All: only show tasks the user has visibility into (not others' private tasks)
+    userFilter = 'AND (is_private = 0 OR assigned_to = ? OR created_by = ?)';
+    params.push(req.user.id, req.user.id);
+  } else {
+    // My tasks: only tasks assigned to the user
     userFilter = 'AND assigned_to = ?';
     params.push(req.user.id);
   }
