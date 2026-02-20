@@ -186,17 +186,11 @@ const SanityChecks = {
       return this.extractEnvName(a).localeCompare(this.extractEnvName(b));
     });
 
-    // Smart defaults: auto-expand envs with failures, collapse healthy ones
-    // If nothing is failing anywhere, expand all
-    const anyFailing = allMonitors.some(m => m.currentStatus === 'fail');
+    // Smart defaults: collapsed by default, auto-expand only envs with failures
     for (const key of envKeys) {
       if (this.expandedEnvironments[key] === undefined) {
-        if (!anyFailing) {
-          this.expandedEnvironments[key] = true;
-        } else {
-          const envFails = (allByEnv[key] || []).some(m => m.currentStatus === 'fail');
-          this.expandedEnvironments[key] = envFails;
-        }
+        const envFails = (allByEnv[key] || []).some(m => m.currentStatus === 'fail');
+        this.expandedEnvironments[key] = envFails;
       }
     }
 
@@ -292,7 +286,7 @@ const SanityChecks = {
       <div class="dc-list">
         ${Object.entries(groups).map(([group, items]) => {
           const failCount = items.filter(m => m.currentStatus === 'fail').length;
-          const isExpanded = this.expandedGroups[group] !== false;
+          const isExpanded = this.expandedGroups[group] === true || (this.expandedGroups[group] === undefined && failCount > 0);
           return `
             <div class="dc-group">
               <button class="dc-group-header" data-group="${escapeHtml(group)}">
@@ -454,7 +448,7 @@ const SanityChecks = {
     app.querySelectorAll('.dc-group-header').forEach(header => {
       header.addEventListener('click', () => {
         const group = header.dataset.group;
-        this.expandedGroups[group] = this.expandedGroups[group] === false;
+        this.expandedGroups[group] = !this.expandedGroups[group];
         this.render(app);
       });
     });
