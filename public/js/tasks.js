@@ -162,8 +162,8 @@ const Tasks = {
           <table class="checks-table tasks-table">
             <thead>
               <tr>
-                <th style="width:100px">Status</th>
-                <th style="width:80px">Priority</th>
+                <th style="width:120px">Status</th>
+                <th style="width:100px">Priority</th>
                 <th>Title</th>
                 ${Tasks.currentView !== 'my' ? '<th style="width:170px">Assigned To</th>' : ''}
                 <th style="width:130px">Category</th>

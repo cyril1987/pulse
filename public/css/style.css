@@ -1606,6 +1606,8 @@ select.staging-cell-input {
   cursor: pointer;
   transition: border-color var(--transition), background var(--transition);
   outline: none;
+  white-space: nowrap;
+  max-width: 100%;
 }
 .task-inline-select:hover {
   border-color: var(--color-card-border);
