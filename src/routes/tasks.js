@@ -480,7 +480,9 @@ router.get('/all', async (req, res) => {
   conditions.push('(t.is_private = 0 OR t.assigned_to = ? OR t.created_by = ?)');
   params.push(req.user.id, req.user.id);
 
-  if (req.query.assignedTo) {
+  if (req.query.assignedTo === '__unassigned__') {
+    conditions.push('t.assigned_to IS NULL');
+  } else if (req.query.assignedTo) {
     conditions.push('t.assigned_to = ?');
     params.push(parseInt(req.query.assignedTo, 10));
   }

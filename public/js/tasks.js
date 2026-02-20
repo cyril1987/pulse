@@ -13,7 +13,12 @@ const Tasks = {
   viewCounts: { my: 0, unassigned: 0, all: 0 },
 
   async render(container, view) {
+    const prevView = Tasks.currentView;
     Tasks.currentView = view || 'my';
+    // Clear assignedTo filter when leaving the All tab (it only applies there)
+    if (prevView === 'all' && Tasks.currentView !== 'all') {
+      Tasks.currentFilters.assignedTo = undefined;
+    }
     Tasks.currentPage = 0;
     if (Tasks.refreshTimer) { clearInterval(Tasks.refreshTimer); Tasks.refreshTimer = null; }
 
@@ -45,6 +50,7 @@ const Tasks = {
     if (Tasks.currentFilters.category) params.set('category', Tasks.currentFilters.category);
     if (Tasks.currentFilters.source) params.set('source', Tasks.currentFilters.source);
     if (Tasks.currentFilters.search) params.set('search', Tasks.currentFilters.search);
+    if (Tasks.currentFilters.assignedTo) params.set('assignedTo', Tasks.currentFilters.assignedTo);
     params.set('sort', Tasks.currentSort);
     params.set('limit', Tasks.pageSize);
     params.set('offset', Tasks.currentPage * Tasks.pageSize);
@@ -97,7 +103,7 @@ const Tasks = {
   renderToolbar() {
     const f = Tasks.currentFilters;
     const showCompleted = f.hideCompleted === false;
-    const hasFilters = f.status || f.priority || f.category || f.source || f.search;
+    const hasFilters = f.status || f.priority || f.category || f.source || f.search || f.assignedTo;
     return `
       <div class="tasks-toolbar">
         <div class="tasks-toolbar-row">
@@ -132,6 +138,12 @@ const Tasks = {
               <option value="jira" ${f.source === 'jira' ? 'selected' : ''}>Jira</option>
               <option value="recurring" ${f.source === 'recurring' ? 'selected' : ''}>Recurring</option>
             </select>
+            ${Tasks.currentView === 'all' ? `
+            <select class="tasks-filter-chip" id="filter-assignedTo">
+              <option value="">Assigned To</option>
+              <option value="__unassigned__" ${f.assignedTo === '__unassigned__' ? 'selected' : ''}>Unassigned</option>
+              ${(Tasks.users || []).map(u => `<option value="${u.id}" ${f.assignedTo == u.id ? 'selected' : ''}>${escapeHtml(u.name)}</option>`).join('')}
+            </select>` : ''}
             ${hasFilters ? '<button class="tasks-clear-filters" id="clear-filters" title="Clear all filters">&times;</button>' : ''}
           </div>
           <div class="tasks-toolbar-actions">
@@ -279,7 +291,7 @@ const Tasks = {
     }
 
     // Filters
-    ['filter-status', 'filter-priority', 'filter-category', 'filter-source', 'sort-select'].forEach(id => {
+    ['filter-status', 'filter-priority', 'filter-category', 'filter-source', 'filter-assignedTo', 'sort-select'].forEach(id => {
       const el = document.getElementById(id);
       if (el) {
         el.addEventListener('change', () => {
@@ -287,6 +299,8 @@ const Tasks = {
           Tasks.currentFilters.priority = document.getElementById('filter-priority').value || undefined;
           Tasks.currentFilters.category = document.getElementById('filter-category').value || undefined;
           Tasks.currentFilters.source = document.getElementById('filter-source').value || undefined;
+          const assignedToEl = document.getElementById('filter-assignedTo');
+          Tasks.currentFilters.assignedTo = assignedToEl ? (assignedToEl.value || undefined) : undefined;
           Tasks.currentSort = document.getElementById('sort-select').value;
           // If user explicitly selects a status, turn off active toggle
           if (Tasks.currentFilters.status) {
