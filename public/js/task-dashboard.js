@@ -45,8 +45,13 @@ const TaskDashboard = {
   renderContent(container, data) {
     const isStandup = TaskDashboard.currentView === 'standup';
 
+    const tabActions = `
+      <a href="#/tasks/standup" class="btn btn-secondary btn-sm" title="Standup overview">🗣️ Standup</a>
+      <a href="#/tasks/ismart-upload" class="btn btn-secondary btn-sm" title="Upload iSmart tickets">↑ iSmart</a>
+      <a href="#/tasks/new" class="btn btn-primary btn-sm">+ New Task</a>
+    `;
     container.innerHTML = `
-      ${renderTasksTabs(isStandup ? 'manage' : 'dashboard')}
+      ${renderTasksTabs(isStandup ? 'manage' : 'dashboard', tabActions)}
       <div class="td-header">
         <div class="td-header-left">
           <h1 class="td-title">
