@@ -64,6 +64,7 @@ const Tasks = {
     const totalPages = Math.ceil(total / Tasks.pageSize);
 
     container.innerHTML = `
+      ${renderTasksTabs('manage')}
       ${Tasks.renderSummaryBar(stats)}
       ${Tasks.renderToolbar()}
       ${tasks.length > 0 ? Tasks.renderTasksTable(tasks) : Tasks.renderEmptyState()}
@@ -115,12 +116,12 @@ const Tasks = {
       <div class="tasks-toolbar">
         <div class="tasks-toolbar-top">
           <div class="tasks-view-toggle">
-            <a href="#/tasks" class="btn btn-sm ${Tasks.currentView === 'my' ? 'btn-primary' : 'btn-secondary'}">My Tasks <span class="tasks-view-count">${Tasks.viewCounts.my}</span></a>
-            <a href="#/tasks/unassigned" class="btn btn-sm ${Tasks.currentView === 'unassigned' ? 'btn-primary' : 'btn-secondary'}">Unassigned <span class="tasks-view-count">${Tasks.viewCounts.unassigned}</span></a>
-            <a href="#/tasks/all" class="btn btn-sm ${Tasks.currentView === 'all' ? 'btn-primary' : 'btn-secondary'}">All <span class="tasks-view-count">${Tasks.viewCounts.all}</span></a>
+            <a href="#/tasks/manage" class="btn btn-sm ${Tasks.currentView === 'my' ? 'btn-primary' : 'btn-secondary'}">My Tasks <span class="tasks-view-count">${Tasks.viewCounts.my}</span></a>
+            <a href="#/tasks/manage/unassigned" class="btn btn-sm ${Tasks.currentView === 'unassigned' ? 'btn-primary' : 'btn-secondary'}">Unassigned <span class="tasks-view-count">${Tasks.viewCounts.unassigned}</span></a>
+            <a href="#/tasks/manage/all" class="btn btn-sm ${Tasks.currentView === 'all' ? 'btn-primary' : 'btn-secondary'}">All <span class="tasks-view-count">${Tasks.viewCounts.all}</span></a>
           </div>
           <div class="tasks-toolbar-actions">
-            <a href="#/tasks/dashboard" class="btn btn-secondary btn-sm" title="Personal dashboard">📊 Dashboard</a>
+            <a href="#/tasks/standup" class="btn btn-secondary btn-sm" title="Standup overview">🗣️ Standup</a>
             <a href="#/tasks/ismart-upload" class="btn btn-secondary btn-sm" title="Upload iSmart tickets">↑ iSmart</a>
             <a href="#/tasks/new" class="btn btn-primary btn-sm">+ New Task</a>
           </div>

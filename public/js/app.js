@@ -66,6 +66,15 @@ async function initAuth() {
   }
 }
 
+function renderTasksTabs(activeTab) {
+  return `
+    <div class="tasks-page-tabs">
+      <a href="#/tasks" class="tasks-page-tab ${activeTab === 'dashboard' ? 'active' : ''}">My Dashboard</a>
+      <a href="#/tasks/manage" class="tasks-page-tab ${activeTab === 'manage' ? 'active' : ''}">Manage Tasks</a>
+    </div>
+  `;
+}
+
 function route() {
   const hash = location.hash.slice(1) || '/';
   const app = document.getElementById('app');
@@ -107,18 +116,18 @@ function route() {
     SanityCheckDetail.render(app, id);
   } else if (hash === '/') {
     Dashboard.render(app);
-  } else if (hash === '/tasks/dashboard') {
+  } else if (hash === '/tasks' || hash === '/tasks/dashboard') {
     TaskDashboard.render(app, 'personal');
   } else if (hash === '/tasks/standup') {
     TaskDashboard.render(app, 'standup');
-  } else if (hash === '/tasks/all') {
+  } else if (hash === '/tasks/manage/all') {
     Tasks.render(app, 'all');
-  } else if (hash === '/tasks/unassigned') {
+  } else if (hash === '/tasks/manage/unassigned') {
     Tasks.render(app, 'unassigned');
   } else if (hash === '/tasks/new' || hash.startsWith('/tasks/new?')) {
     const params = new URLSearchParams(hash.split('?')[1] || '');
     Tasks.renderForm(app, null, params.get('parent'));
-  } else if (hash === '/tasks') {
+  } else if (hash === '/tasks/manage') {
     Tasks.render(app);
   } else if (hash.match(/^\/tasks\/\d+\/edit$/)) {
     const id = hash.split('/')[2];

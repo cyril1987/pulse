@@ -1314,6 +1314,31 @@ select.staging-cell-input {
    Task Management Styles
    ═══════════════════════════════════════════════════════════════════════════ */
 
+/* Tasks Page Tabs */
+.tasks-page-tabs {
+  display: flex;
+  gap: 0;
+  border-bottom: 2px solid var(--color-card-border);
+  margin-bottom: 1rem;
+}
+.tasks-page-tab {
+  padding: 0.6rem 1.25rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--color-text-tertiary);
+  text-decoration: none;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -2px;
+  transition: color var(--transition), border-color var(--transition);
+}
+.tasks-page-tab:hover {
+  color: var(--color-text-secondary);
+}
+.tasks-page-tab.active {
+  color: var(--color-primary);
+  border-bottom-color: var(--color-primary);
+}
+
 /* Tasks Toolbar */
 .tasks-toolbar {
   margin-bottom: 0.75rem;

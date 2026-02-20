@@ -46,6 +46,7 @@ const TaskDashboard = {
     const isStandup = TaskDashboard.currentView === 'standup';
 
     container.innerHTML = `
+      ${renderTasksTabs(isStandup ? 'manage' : 'dashboard')}
       <div class="td-header">
         <div class="td-header-left">
           <h1 class="td-title">
@@ -57,11 +58,7 @@ const TaskDashboard = {
               : `Personal task summary for ${escapeHtml(currentUser?.name || 'you')}`}
           </p>
         </div>
-        <div class="td-header-actions">
-          <a href="#/tasks/dashboard" class="btn btn-sm ${!isStandup ? 'btn-primary' : 'btn-secondary'}">My Dashboard</a>
-          <a href="#/tasks/standup" class="btn btn-sm ${isStandup ? 'btn-primary' : 'btn-secondary'}">Standup</a>
-          <a href="#/tasks" class="btn btn-sm btn-secondary">← Back to Tasks</a>
-        </div>
+        ${isStandup ? '<div class="td-header-actions"><a href="#/tasks/manage" class="btn btn-sm btn-secondary">← Back to Tasks</a></div>' : ''}
       </div>
 
       ${isStandup ? TaskDashboard.renderStandupUserFilter() : ''}
