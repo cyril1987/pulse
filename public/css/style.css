@@ -1595,8 +1595,6 @@ select.staging-cell-input {
 
 /* Inline select dropdowns (task list) */
 .task-inline-select {
-  appearance: none;
-  -webkit-appearance: none;
   border: 1px solid transparent;
   background: transparent;
   font-size: 0.68rem;
@@ -1608,8 +1606,6 @@ select.staging-cell-input {
   cursor: pointer;
   transition: border-color var(--transition), background var(--transition);
   outline: none;
-  width: 100%;
-  max-width: 110px;
 }
 .task-inline-select:hover {
   border-color: var(--color-card-border);
